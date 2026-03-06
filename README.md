@@ -1,10 +1,6 @@
-# WORK IN PROGRESS - DO NOT USE
-
 # denon-rs232
 
 Async Python library to control Denon AV receivers over RS232 serial, built on [serialx](https://github.com/puddly/serialx).
-
-Supports ~30 Denon receiver models from 2003-2016, including the AVR-3805, AVR-4308CI, AVR-X4000, AVR-X4200W, and many more.
 
 ## Installation
 

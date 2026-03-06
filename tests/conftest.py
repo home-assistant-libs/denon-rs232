@@ -10,6 +10,7 @@ import denon_rs232
 from denon_rs232 import DenonReceiver
 
 # Speed up tests by reducing delays
+denon_rs232.COMMAND_TIMEOUT = 0.1
 denon_rs232.MULTI_RESPONSE_DELAY = 0.01
 denon_rs232.PROBE_TIMEOUT = 0.01
 
@@ -17,7 +18,7 @@ denon_rs232.PROBE_TIMEOUT = 0.01
 DEFAULT_QUERY_RESPONSES: dict[str, list[str]] = {
     "PW": ["PWON"],
     "ZM": ["ZMON"],
-    "MV": ["MV80", "MVMAX 98"],
+    "MV": ["MVMAX 98", "MVMIN 99", "MV80"],
     "MU": ["MUOFF"],
     "SI": ["SICD"],
     "MS": ["MSSTEREO"],

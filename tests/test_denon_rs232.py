@@ -22,7 +22,6 @@ from denon_rs232 import (
     TunerMode,
     _channel_volume_to_param,
     _parse_channel_volume_param,
-    _parse_cv_message,
     _parse_volume_param,
     _volume_to_param,
 )
@@ -132,30 +131,6 @@ def test_channel_volume_roundtrip():
         assert _parse_channel_volume_param(_channel_volume_to_param(db)) == db
 
 
-# -- CV message parsing tests --
-
-
-def test_parse_cv_message_fl():
-    assert _parse_cv_message("FL 50") == ("FL", "50")
-
-
-def test_parse_cv_message_sbl():
-    assert _parse_cv_message("SBL UP") == ("SBL", "UP")
-
-
-def test_parse_cv_message_center():
-    assert _parse_cv_message("C 45") == ("C", "45")
-
-
-def test_parse_cv_message_sb_before_sbl():
-    # "SB UP" should match SB, not fail to match SBL/SBR
-    assert _parse_cv_message("SB UP") == ("SB", "UP")
-
-
-def test_parse_cv_message_unknown():
-    assert _parse_cv_message("XX 50") is None
-
-
 # -- State tests --
 
 
@@ -165,6 +140,8 @@ def test_initial_state():
     assert state.main_zone is None
     assert state.mute is None
     assert state.volume is None
+    assert state.volume_max is None
+    assert state.volume_min is None
     assert state.input_source is None
     assert state.surround_mode is None
     assert state.channel_volumes == {}
@@ -173,12 +150,19 @@ def test_initial_state():
 
 
 def test_state_copy():
-    state = DenonState(power=PowerState.ON, volume=0.0)
+    state = DenonState(
+        power=PowerState.ON,
+        volume=0.0,
+        volume_max=18.0,
+        volume_min=-80.0,
+    )
     state.channel_volumes["FL"] = 0.0
     state.zone2.power = True
     copy = state.copy()
     assert copy.power is PowerState.ON
     assert copy.volume == 0.0
+    assert copy.volume_max == 18.0
+    assert copy.volume_min == -80.0
     assert copy.channel_volumes == {"FL": 0.0}
     assert copy.zone2.power is True
     # Verify deep copy
@@ -203,6 +187,8 @@ async def test_connect_populates_full_state(receiver):
     assert state.power == PowerState.ON
     assert state.main_zone is True
     assert state.volume == 0.0
+    assert state.volume_max == 18.0
+    assert state.volume_min == -80.0
     assert state.mute is False
     assert state.input_source == InputSource.CD
     assert state.surround_mode == "STEREO"
@@ -563,12 +549,15 @@ async def test_query_volume(receiver, mock_serial):
     async def respond():
         await asyncio.sleep(0.05)
         mock_serial.inject_response("MVMAX 98")
+        mock_serial.inject_response("MVMIN 99")
         mock_serial.inject_response("MV75")
 
     task = asyncio.create_task(respond())
     result = await receiver.query_volume()
     await task
     assert result == -5.0
+    assert receiver.state.volume_max == 18.0
+    assert receiver.state.volume_min == -80.0
 
 
 async def test_query_mute(receiver, mock_serial):
@@ -699,10 +688,10 @@ async def test_input_source_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("SICD")
+    mock_serial.inject_response("SIDVD")
     await asyncio.sleep(0.1)
 
-    assert states[-1].input_source == InputSource.CD
+    assert states[-1].input_source == InputSource.DVD
 
 
 async def test_input_source_event_with_slash(receiver, mock_serial):
@@ -722,10 +711,10 @@ async def test_surround_mode_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("MSSTEREO")
+    mock_serial.inject_response("MSDIRECT")
     await asyncio.sleep(0.1)
 
-    assert states[-1].surround_mode == "STEREO"
+    assert states[-1].surround_mode == "DIRECT"
 
 
 async def test_surround_mode_event_combined(receiver, mock_serial):
@@ -745,10 +734,10 @@ async def test_channel_volume_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("CVFL 50")
+    mock_serial.inject_response("CVFL 52")
     await asyncio.sleep(0.1)
 
-    assert states[-1].channel_volumes["FL"] == 0.0
+    assert states[-1].channel_volumes["FL"] == 2.0
 
 
 async def test_channel_volume_event_subwoofer(receiver, mock_serial):
@@ -771,12 +760,33 @@ async def test_channel_volume_event_surround_back_left(receiver, mock_serial):
     assert states[-1].channel_volumes["SBL"] == -2.0
 
 
+async def test_channel_volume_event_accepts_unknown_channel(receiver, mock_serial):
+    states: list[DenonState] = []
+    receiver.subscribe(lambda s: states.append(s))
+
+    mock_serial.inject_response("CVFH 51")
+    await asyncio.sleep(0.1)
+
+    assert states[-1].channel_volumes["FH"] == 1.0
+
+
 async def test_channel_volume_up_event_no_state_change(receiver, mock_serial):
     """CV UP/DOWN events should not update state."""
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
     mock_serial.inject_response("CVFL UP")
+    await asyncio.sleep(0.1)
+
+    assert len(states) == 0
+
+
+async def test_duplicate_channel_volume_event_no_state_change(receiver, mock_serial):
+    """Duplicate channel volume values should not notify subscribers."""
+    states: list[DenonState] = []
+    receiver.subscribe(lambda s: states.append(s))
+
+    mock_serial.inject_response("CVFL 50")
     await asyncio.sleep(0.1)
 
     assert len(states) == 0
@@ -791,7 +801,7 @@ async def test_multiple_channel_volume_events(receiver, mock_serial):
     mock_serial.inject_response("CVC 48")
     await asyncio.sleep(0.1)
 
-    assert len(states) == 3
+    assert len(states) == 2
     assert states[-1].channel_volumes["FL"] == 0.0
     assert states[-1].channel_volumes["FR"] == 2.0
     assert states[-1].channel_volumes["C"] == -2.0
@@ -814,6 +824,8 @@ async def test_tone_defeat_off_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
+    mock_serial.inject_response("PSTONE DEFEAT ON")
+    await asyncio.sleep(0.05)
     mock_serial.inject_response("PSTONE DEFEAT OFF")
     await asyncio.sleep(0.1)
 
@@ -834,6 +846,8 @@ async def test_surround_back_off_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
+    mock_serial.inject_response("PSSB:MTRX ON")
+    await asyncio.sleep(0.05)
     mock_serial.inject_response("PSSB:OFF")
     await asyncio.sleep(0.1)
 
@@ -854,10 +868,10 @@ async def test_mode_setting_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("PSMODE : CINEMA")
+    mock_serial.inject_response("PSMODE : MUSIC")
     await asyncio.sleep(0.1)
 
-    assert states[-1].mode_setting == ModeSetting.CINEMA
+    assert states[-1].mode_setting == ModeSetting.MUSIC
 
 
 async def test_room_eq_event(receiver, mock_serial):
@@ -877,10 +891,10 @@ async def test_digital_input_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("SDAUTO")
+    mock_serial.inject_response("SDANALOG")
     await asyncio.sleep(0.1)
 
-    assert states[-1].digital_input == DigitalInputMode.AUTO
+    assert states[-1].digital_input == DigitalInputMode.ANALOG
 
 
 async def test_digital_input_no_event(receiver, mock_serial, caplog):
@@ -902,10 +916,10 @@ async def test_video_select_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("SVDVD")
+    mock_serial.inject_response("SVCD")
     await asyncio.sleep(0.1)
 
-    assert states[-1].video_select == InputSource.DVD
+    assert states[-1].video_select == InputSource.CD
 
 
 async def test_video_select_source_event(receiver, mock_serial):
@@ -962,10 +976,10 @@ async def test_tuner_frequency_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("TF105000")
+    mock_serial.inject_response("TF106000")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tuner_frequency == "105000"
+    assert states[-1].tuner_frequency == "106000"
 
 
 async def test_tuner_frequency_up_no_state(receiver, mock_serial):
@@ -983,30 +997,30 @@ async def test_tuner_preset_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("TPA1")
+    mock_serial.inject_response("TPB2")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tuner_preset == "A1"
+    assert states[-1].tuner_preset == "B2"
 
 
 async def test_tuner_band_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("TMFM")
+    mock_serial.inject_response("TMAM")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tuner_band == TunerBand.FM
+    assert states[-1].tuner_band == TunerBand.AM
 
 
 async def test_tuner_mode_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("TMAUTO")
+    mock_serial.inject_response("TMMANUAL")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tuner_mode == TunerMode.AUTO
+    assert states[-1].tuner_mode == TunerMode.MANUAL
 
 
 # -- Event tests: zone 2 --
@@ -1026,6 +1040,8 @@ async def test_zone2_power_off_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
+    mock_serial.inject_response("Z2ON")
+    await asyncio.sleep(0.05)
     mock_serial.inject_response("Z2OFF")
     await asyncio.sleep(0.1)
 
@@ -1156,6 +1172,16 @@ async def test_power_event(receiver, mock_serial):
     assert states[-1].power == PowerState.STANDBY
 
 
+async def test_duplicate_power_event_no_state_change(receiver, mock_serial):
+    states: list[DenonState] = []
+    receiver.subscribe(lambda s: states.append(s))
+
+    mock_serial.inject_response("PWON")
+    await asyncio.sleep(0.1)
+
+    assert len(states) == 0
+
+
 async def test_mute_event(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
@@ -1176,30 +1202,45 @@ async def test_main_zone_event(receiver, mock_serial):
     assert states[-1].main_zone is False
 
 
-async def test_max_volume_ignored(receiver, mock_serial):
-    """MVMAX messages should not update volume state."""
+async def test_max_volume_event(receiver, mock_serial):
+    """MVMAX messages should update the stored max volume."""
     states: list[DenonState] = []
+    receiver._state.volume_max = None
     receiver.subscribe(lambda s: states.append(s))
 
     mock_serial.inject_response("MVMAX 98")
     await asyncio.sleep(0.1)
 
-    assert len(states) == 0
+    assert states[-1].volume_max == 18.0
+    assert states[-1].volume == 0.0
+
+
+async def test_min_volume_event(receiver, mock_serial):
+    """MVMIN messages should update the stored min volume."""
+    states: list[DenonState] = []
+    receiver._state.volume_min = None
+    receiver.subscribe(lambda s: states.append(s))
+
+    mock_serial.inject_response("MVMIN 99")
+    await asyncio.sleep(0.1)
+
+    assert states[-1].volume_min == -80.0
+    assert states[-1].volume == 0.0
 
 
 async def test_multiple_events(receiver, mock_serial):
     states: list[DenonState] = []
     receiver.subscribe(lambda s: states.append(s))
 
-    mock_serial.inject_response("PWON")
+    mock_serial.inject_response("PWSTANDBY")
     mock_serial.inject_response("MV75")
-    mock_serial.inject_response("MUOFF")
+    mock_serial.inject_response("MUON")
     await asyncio.sleep(0.1)
 
     assert len(states) == 3
-    assert states[-1].power == PowerState.ON
+    assert states[-1].power == PowerState.STANDBY
     assert states[-1].volume == -5.0
-    assert states[-1].mute is False
+    assert states[-1].mute is True
 
 
 async def test_bad_callback_doesnt_break(receiver, mock_serial):
@@ -1211,7 +1252,7 @@ async def test_bad_callback_doesnt_break(receiver, mock_serial):
     receiver.subscribe(bad_callback)
     receiver.subscribe(lambda s: good_states.append(s))
 
-    mock_serial.inject_response("PWON")
+    mock_serial.inject_response("PWSTANDBY")
     await asyncio.sleep(0.1)
 
     assert len(good_states) == 1

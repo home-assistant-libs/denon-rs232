@@ -10,6 +10,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
+      - name: Set package version from release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: sed -i "s/^version = \"0\\.0\\.0\"$/version = \"${RELEASE_TAG}\"/" pyproject.toml
       - run: uv build
       - uses: actions/upload-artifact@v4
         with:

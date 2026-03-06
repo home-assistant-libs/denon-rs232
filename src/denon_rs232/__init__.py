@@ -28,9 +28,6 @@ MIN_VOLUME_DB = -80.0
 MAX_VOLUME_DB = 18.0
 VOLUME_DB_RANGE = MAX_VOLUME_DB - MIN_VOLUME_DB  # 98.0
 
-# Channel names for channel volume, ordered longest-first for prefix matching.
-CV_CHANNELS = ("SBL", "SBR", "SB", "FL", "FR", "SW", "SL", "SR", "C")
-
 _ZONE_VOL_RE = re.compile(r"^\d{2,3}$")
 
 # Prefixes that return a single response to "?", safe for _query().
@@ -197,6 +194,8 @@ class DenonState:
     main_zone: bool | None = None
     mute: bool | None = None
     volume: float | None = None
+    volume_max: float | None = None
+    volume_min: float | None = None
     input_source: InputSource | None = None
     #: Surround mode name. Kept as str because the receiver returns many
     #: combined mode names (e.g. "DOLBY D+PL2X C", "M CH IN+PL2X M").
@@ -293,18 +292,6 @@ def _channel_volume_to_param(db: float) -> str:
     if raw - whole >= 0.5:
         return f"{whole:02d}5"
     return f"{whole:02d}"
-
-
-def _parse_cv_message(param: str) -> tuple[str, str] | None:
-    """Parse a channel volume message param into (channel, value_part).
-
-    e.g. "FL 50" -> ("FL", "50"), "SBL UP" -> ("SBL", "UP")
-    Returns None if the channel is not recognized.
-    """
-    for ch in CV_CHANNELS:
-        if param.startswith(ch + " "):
-            return ch, param[len(ch) + 1:]
-    return None
 
 
 # Type alias for state change callbacks
@@ -681,12 +668,15 @@ class DenonReceiver:
     # -- Internal methods --
 
     async def _send_and_wait(
-        self, prefix: str, param: str, timeout: float = PROBE_TIMEOUT
+        self, prefix: str, param: str, timeout: float | None = None
     ) -> str | None:
         """Send a command and wait for a response with the given prefix.
 
         Returns the response parameter, or None if no response within timeout.
         """
+        if timeout is None:
+            timeout = PROBE_TIMEOUT
+
         loop = asyncio.get_running_loop()
         future: asyncio.Future[str] = loop.create_future()
         pending = _PendingQuery(prefix=prefix, future=future)
@@ -792,6 +782,18 @@ class DenonReceiver:
                 if message:
                     self._process_message(message)
 
+    @staticmethod
+    def _set_attr_value(target: object, attr: str, new_value: object) -> bool:
+        """Set an attribute only when the value changed."""
+        if getattr(target, attr) == new_value:
+            return False
+        setattr(target, attr, new_value)
+        return True
+
+    def _set_state_value(self, attr: str, new_value: object) -> bool:
+        """Set a DenonState attribute only when the value changed."""
+        return self._set_attr_value(self._state, attr, new_value)
+
     def _process_message(self, message: str) -> None:
         """Parse and process a message from the receiver."""
         _LOGGER.debug("Received: %s", message)
@@ -801,107 +803,116 @@ class DenonReceiver:
 
         prefix = message[:2]
         param = message[2:]
+
+        if prefix == "MV" and param.startswith("MAX"):
+            prefix = "MVMAX"
+            param = param.removeprefix("MAX").strip()
+        elif prefix == "MV" and param.startswith("MIN"):
+            prefix = "MVMIN"
+            param = param.removeprefix("MIN").strip()
+
         changed = False
 
         if prefix == "PW":
             try:
-                self._state.power = PowerState(param)
-                changed = True
+                changed = self._set_state_value("power", PowerState(param))
             except ValueError:
                 _LOGGER.warning("Unknown power state: %s", param)
 
         elif prefix == "ZM":
-            self._state.main_zone = param == "ON"
-            changed = True
+            changed = self._set_state_value("main_zone", param == "ON")
 
         elif prefix == "MV":
-            if not param.startswith("MAX"):
-                try:
-                    self._state.volume = _parse_volume_param(param)
-                    changed = True
-                except (ValueError, IndexError):
-                    _LOGGER.warning("Could not parse volume: %s", param)
+            try:
+                changed = self._set_state_value("volume", _parse_volume_param(param))
+            except (ValueError, IndexError):
+                _LOGGER.warning("Could not parse volume: %s", param)
+
+        elif prefix == "MVMAX":
+            try:
+                changed = self._set_state_value(
+                    "volume_max", _parse_volume_param(param)
+                )
+            except (ValueError, IndexError):
+                _LOGGER.warning("Could not parse max volume: %s", param)
+
+        elif prefix == "MVMIN":
+            try:
+                changed = self._set_state_value(
+                    "volume_min", _parse_volume_param(param)
+                )
+            except (ValueError, IndexError):
+                _LOGGER.warning("Could not parse min volume: %s", param)
 
         elif prefix == "MU":
-            self._state.mute = param == "ON"
-            changed = True
+            changed = self._set_state_value("mute", param == "ON")
 
         elif prefix == "SI":
             try:
-                self._state.input_source = InputSource(param)
-                changed = True
+                changed = self._set_state_value("input_source", InputSource(param))
             except ValueError:
                 _LOGGER.warning("Unknown input source: %s", param)
 
         elif prefix == "MS":
-            self._state.surround_mode = param
-            changed = True
+            changed = self._set_state_value("surround_mode", param)
 
         elif prefix == "CV":
-            parsed = _parse_cv_message(param)
-            if parsed is not None:
-                ch, val = parsed
-                if val not in ("UP", "DOWN"):
-                    try:
-                        self._state.channel_volumes[ch] = _parse_channel_volume_param(val)
+            channel, sep, val = param.partition(" ")
+            if sep and val not in ("UP", "DOWN"):
+                try:
+                    new_value = _parse_channel_volume_param(val)
+                    if self._state.channel_volumes.get(channel) != new_value:
+                        self._state.channel_volumes[channel] = new_value
                         changed = True
-                    except (ValueError, IndexError):
-                        _LOGGER.warning("Could not parse channel volume: %s", param)
+                except (ValueError, IndexError):
+                    _LOGGER.warning("Could not parse channel volume: %s", param)
 
         elif prefix == "PS":
             changed = self._process_ps_param(param)
 
         elif prefix == "SD":
             if param == "NO":
-                self._state.digital_input = None
-                changed = True
+                changed = self._set_state_value("digital_input", None)
             else:
                 try:
-                    self._state.digital_input = DigitalInputMode(param)
-                    changed = True
+                    changed = self._set_state_value(
+                        "digital_input", DigitalInputMode(param)
+                    )
                 except ValueError:
                     _LOGGER.warning("Unknown digital input mode: %s", param)
 
         elif prefix == "SV":
             if param in ("SOURCE", "OFF"):
-                self._state.video_select = None
-                changed = True
+                changed = self._set_state_value("video_select", None)
             else:
                 try:
-                    self._state.video_select = InputSource(param)
-                    changed = True
+                    changed = self._set_state_value("video_select", InputSource(param))
                 except ValueError:
                     _LOGGER.warning("Unknown video source: %s", param)
 
         elif prefix == "SR":
             if param == "SOURCE":
-                self._state.rec_select = None
-                changed = True
+                changed = self._set_state_value("rec_select", None)
             else:
                 try:
-                    self._state.rec_select = InputSource(param)
-                    changed = True
+                    changed = self._set_state_value("rec_select", InputSource(param))
                 except ValueError:
                     _LOGGER.warning("Unknown rec source: %s", param)
 
         elif prefix == "TF":
             if param not in ("UP", "DOWN"):
-                self._state.tuner_frequency = param
-                changed = True
+                changed = self._set_state_value("tuner_frequency", param)
 
         elif prefix == "TP":
             if param not in ("UP", "DOWN"):
-                self._state.tuner_preset = param
-                changed = True
+                changed = self._set_state_value("tuner_preset", param)
 
         elif prefix == "TM":
             try:
-                self._state.tuner_band = TunerBand(param)
-                changed = True
+                changed = self._set_state_value("tuner_band", TunerBand(param))
             except ValueError:
                 try:
-                    self._state.tuner_mode = TunerMode(param)
-                    changed = True
+                    changed = self._set_state_value("tuner_mode", TunerMode(param))
                 except ValueError:
                     _LOGGER.warning("Unknown tuner setting: %s", param)
 
@@ -917,9 +928,6 @@ class DenonReceiver:
         # Resolve any pending queries for this prefix
         for pending in list(self._pending_queries):
             if pending.prefix == prefix and not pending.future.done():
-                # Skip MVMAX responses when resolving MV queries
-                if prefix == "MV" and param.startswith("MAX"):
-                    continue
                 pending.future.set_result(param)
 
         if changed:
@@ -928,58 +936,58 @@ class DenonReceiver:
     def _process_ps_param(self, param: str) -> bool:
         """Process a PS (parameter setting) parameter. Returns True if state changed."""
         if param == "TONE DEFEAT ON":
-            self._state.tone_defeat = True
+            return self._set_state_value("tone_defeat", True)
         elif param == "TONE DEFEAT OFF":
-            self._state.tone_defeat = False
+            return self._set_state_value("tone_defeat", False)
         elif param.startswith("SB:"):
             try:
-                self._state.surround_back = SurroundBack(param[3:])
+                return self._set_state_value("surround_back", SurroundBack(param[3:]))
             except ValueError:
                 _LOGGER.warning("Unknown surround back mode: %s", param)
                 return False
         elif param == "CINEMA EQ.ON":
-            self._state.cinema_eq = True
+            return self._set_state_value("cinema_eq", True)
         elif param == "CINEMA EQ.OFF":
-            self._state.cinema_eq = False
+            return self._set_state_value("cinema_eq", False)
         elif param.startswith("MODE : "):
             try:
-                self._state.mode_setting = ModeSetting(param[7:])
+                return self._set_state_value(
+                    "mode_setting", ModeSetting(param[7:])
+                )
             except ValueError:
                 _LOGGER.warning("Unknown mode setting: %s", param)
                 return False
         elif param.startswith("ROOM EQ:"):
             try:
-                self._state.room_eq = RoomEQ(param[8:])
+                return self._set_state_value("room_eq", RoomEQ(param[8:]))
             except ValueError:
                 _LOGGER.warning("Unknown room EQ mode: %s", param)
                 return False
         else:
             _LOGGER.debug("Unknown PS parameter: %s", param)
             return False
-        return True
 
     def _process_zone_param(self, zone: ZoneState, param: str) -> bool:
         """Process a Z2/Z1 (zone) parameter. Returns True if state changed."""
         if param == "ON":
-            zone.power = True
+            return self._set_attr_value(zone, "power", True)
         elif param == "OFF":
-            zone.power = False
+            return self._set_attr_value(zone, "power", False)
         elif param in ("UP", "DOWN"):
             return False
         elif _ZONE_VOL_RE.match(param):
             try:
-                zone.volume = _parse_volume_param(param)
+                return self._set_attr_value(zone, "volume", _parse_volume_param(param))
             except (ValueError, IndexError):
                 return False
         elif param == "SOURCE":
-            zone.source = None
+            return self._set_attr_value(zone, "source", None)
         else:
             try:
-                zone.source = InputSource(param)
+                return self._set_attr_value(zone, "source", InputSource(param))
             except ValueError:
                 _LOGGER.warning("Unknown zone source: %s", param)
                 return False
-        return True
 
     def _notify_subscribers(self, state: DenonState | None = None) -> None:
         """Notify all subscribers of a state change or disconnect (None)."""
@@ -989,4 +997,4 @@ class DenonReceiver:
             try:
                 callback(state)
             except Exception:
-                _LOGGER.exception("Error in state change callback")
+                _LOGGER.exception("Error in state change callback %s", callback)

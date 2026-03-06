@@ -175,7 +175,7 @@ await receiver.set_digital_input(DigitalInputMode.AUTO)
 await receiver.set_digital_input(DigitalInputMode.HDMI)
 await receiver.set_digital_input(DigitalInputMode.DIGITAL)
 await receiver.set_digital_input(DigitalInputMode.ANALOG)
-mode = await receiver.query_digital_input()  # DigitalInputMode enum
+mode = await receiver.query_digital_input()  # DigitalInputMode enum or None ("NO")
 ```
 
 Legacy models also support `PCM`, `DTS`, `RF`, `EXT_IN_1`, `EXT_IN_2`.

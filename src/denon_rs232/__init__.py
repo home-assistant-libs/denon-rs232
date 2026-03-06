@@ -20,7 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 BAUD_RATE = 9600
 COMMAND_TIMEOUT = 2.0  # seconds to wait for a response
 MULTI_RESPONSE_DELAY = 0.3  # seconds to wait for multi-response query results
-PROBE_TIMEOUT = 0.5  # seconds to wait for each probe attempt
+PROBE_TIMEOUT = 0.8  # seconds to wait for each probe attempt
 CR = b"\r"
 
 # Volume range constants (dB)
@@ -526,8 +526,11 @@ class DenonReceiver:
         """Set digital input mode."""
         await self._send_command("SD", mode.value)
 
-    async def query_digital_input(self) -> DigitalInputMode:
-        return DigitalInputMode(await self._query("SD"))
+    async def query_digital_input(self) -> DigitalInputMode | None:
+        param = await self._query("SD")
+        if param == "NO":
+            return None
+        return DigitalInputMode(param)
 
     # -- Video select commands --
 
@@ -638,7 +641,9 @@ class DenonReceiver:
 
     # -- Probing --
 
-    async def probe_sources(self) -> frozenset[InputSource]:
+    async def probe_sources(
+        self, timeout: float | None = None
+    ) -> frozenset[InputSource]:
         """Probe which input sources the receiver supports.
 
         Tries setting each input source and checks if the receiver accepts it.
@@ -650,6 +655,9 @@ class DenonReceiver:
         if not self._connected:
             raise ConnectionError("Not connected")
 
+        if timeout is None:
+            timeout = PROBE_TIMEOUT
+
         original = self._state.input_source
         available: set[InputSource] = set()
 
@@ -660,7 +668,7 @@ class DenonReceiver:
         for source in InputSource:
             if source == original:
                 continue
-            resp = await self._send_and_wait("SI", source.value)
+            resp = await self._send_and_wait("SI", source.value, timeout=timeout)
             if resp == source.value:
                 available.add(source)
 
@@ -844,11 +852,15 @@ class DenonReceiver:
             changed = self._process_ps_param(param)
 
         elif prefix == "SD":
-            try:
-                self._state.digital_input = DigitalInputMode(param)
+            if param == "NO":
+                self._state.digital_input = None
                 changed = True
-            except ValueError:
-                _LOGGER.warning("Unknown digital input mode: %s", param)
+            else:
+                try:
+                    self._state.digital_input = DigitalInputMode(param)
+                    changed = True
+                except ValueError:
+                    _LOGGER.warning("Unknown digital input mode: %s", param)
 
         elif prefix == "SV":
             if param in ("SOURCE", "OFF"):

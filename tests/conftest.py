@@ -11,7 +11,7 @@ from denon_rs232 import DenonReceiver
 
 # Speed up tests by reducing delays
 denon_rs232.MULTI_RESPONSE_DELAY = 0.01
-denon_rs232.PROBE_TIMEOUT = 0.1
+denon_rs232.PROBE_TIMEOUT = 0.01
 
 # Default responses for all query prefixes during startup.
 DEFAULT_QUERY_RESPONSES: dict[str, list[str]] = {

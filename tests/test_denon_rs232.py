@@ -626,6 +626,17 @@ async def test_query_digital_input(receiver, mock_serial):
     assert result == DigitalInputMode.AUTO
 
 
+async def test_query_digital_input_no_returns_none(receiver, mock_serial):
+    async def respond():
+        await asyncio.sleep(0.05)
+        mock_serial.inject_response("SDNO")
+
+    task = asyncio.create_task(respond())
+    result = await receiver.query_digital_input()
+    await task
+    assert result is None
+
+
 async def test_query_video_select(receiver, mock_serial):
     async def respond():
         await asyncio.sleep(0.05)
@@ -870,6 +881,18 @@ async def test_digital_input_event(receiver, mock_serial):
     await asyncio.sleep(0.1)
 
     assert states[-1].digital_input == DigitalInputMode.AUTO
+
+
+async def test_digital_input_no_event(receiver, mock_serial, caplog):
+    """SD NO should clear digital_input to None without warning."""
+    states: list[DenonState] = []
+    receiver.subscribe(lambda s: states.append(s))
+
+    mock_serial.inject_response("SDNO")
+    await asyncio.sleep(0.1)
+
+    assert states[-1].digital_input is None
+    assert "Unknown digital input mode: NO" not in caplog.text
 
 
 # -- Event tests: video select --

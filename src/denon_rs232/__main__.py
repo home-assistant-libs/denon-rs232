@@ -12,7 +12,7 @@ import argparse
 import asyncio
 import sys
 
-from . import DenonReceiver, DenonState, ZONE3_PREFIX
+from . import DenonReceiver, ReceiverState, ZONE3_PREFIX
 
 
 def _format_db(db: float | None) -> str:
@@ -33,7 +33,7 @@ def _format_enum(val: object | None) -> str:
     return str(val)
 
 
-def _print_state(state: DenonState) -> None:
+def _print_state(state: ReceiverState) -> None:
     print()
     print("=== Receiver Status ===")
     print()
@@ -42,7 +42,7 @@ def _print_state(state: DenonState) -> None:
         f"  Power:           {'ON' if state.power else 'STANDBY' if state.power is not None else '?'}"
     )
     print(
-        f"  Main zone:       {'ON' if state.main_zone else 'OFF' if state.main_zone is not None else '?'}"
+        f"  Main zone:       {'ON' if state.main_zone_power else 'OFF' if state.main_zone_power is not None else '?'}"
     )
     print(f"  Volume:          {_format_db(state.volume)}")
     print(
@@ -96,7 +96,7 @@ def _print_state(state: DenonState) -> None:
             print(f"    Mode:       {state.tuner_mode.value}")
 
     # Zones
-    for label, zone in [("Zone 2", state.zone2), ("Zone 3", state.zone3)]:
+    for label, zone in [("Zone 2", state.zone_2), ("Zone 3", state.zone_3)]:
         if zone.power is not None:
             print()
             print(f"  {label}:")

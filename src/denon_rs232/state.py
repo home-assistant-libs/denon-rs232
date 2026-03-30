@@ -28,12 +28,12 @@ class ZoneState:
 
 
 @dataclass
-class DenonState:
+class ReceiverState:
     """Current state of the Denon receiver."""
 
     # Core (queryable)
     power: bool | None = None
-    main_zone: bool | None = None
+    main_zone_power: bool | None = None
     mute: bool | None = None
     volume: float | None = None
     volume_max: float | None = None
@@ -68,13 +68,13 @@ class DenonState:
     tuner_mode: TunerMode | None = None
 
     # Zones. Event-only. Populated from Z2?/Z1? responses and zone events.
-    zone2: ZoneState = field(default_factory=ZoneState)
-    zone3: ZoneState = field(default_factory=ZoneState)
+    zone_2: ZoneState = field(default_factory=ZoneState)
+    zone_3: ZoneState = field(default_factory=ZoneState)
 
-    def copy(self) -> DenonState:
+    def copy(self) -> ReceiverState:
         return replace(
             self,
             channel_volumes=dict(self.channel_volumes),
-            zone2=replace(self.zone2),
-            zone3=replace(self.zone3),
+            zone_2=replace(self.zone_2),
+            zone_3=replace(self.zone_3),
         )

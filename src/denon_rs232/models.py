@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import DigitalInputMode, InputSource
+from .const import DigitalInputMode, InputSource
 
 
 @dataclass(frozen=True)
@@ -18,50 +18,64 @@ class ReceiverModel:
     #: Zone 3 command prefix: "Z1" for legacy (AVR-3803/3805), "Z3" for modern.
     #: None means the model has no Zone 3.
     zone3_prefix: str | None = None
+    #: Query prefixes to skip during connect() because the receiver does not
+    #: answer them even though older models may.
+    unsupported_startup_queries: frozenset[str] = frozenset()
+
 
 # -- Common source/digital sets used across multiple models --
 
-_LEGACY_SOURCES = frozenset({
-    InputSource.PHONO,
-    InputSource.CD,
-    InputSource.TUNER,
-    InputSource.DVD,
-    InputSource.VDP,
-    InputSource.TV,
-    InputSource.DBS_SAT,
-    InputSource.VCR_1,
-    InputSource.VCR_2,
-    InputSource.V_AUX,
-    InputSource.CDR_TAPE1,
-})
+_LEGACY_SOURCES = frozenset(
+    {
+        InputSource.PHONO,
+        InputSource.CD,
+        InputSource.TUNER,
+        InputSource.DVD,
+        InputSource.VDP,
+        InputSource.TV,
+        InputSource.DBS_SAT,
+        InputSource.VCR_1,
+        InputSource.VCR_2,
+        InputSource.V_AUX,
+        InputSource.CDR_TAPE1,
+    }
+)
 
-_GEN1_DIGITAL = frozenset({
-    DigitalInputMode.AUTO,
-    DigitalInputMode.PCM,
-    DigitalInputMode.DTS,
-    DigitalInputMode.ANALOG,
-    DigitalInputMode.EXT_IN_1,
-})
+_GEN1_DIGITAL = frozenset(
+    {
+        DigitalInputMode.AUTO,
+        DigitalInputMode.PCM,
+        DigitalInputMode.DTS,
+        DigitalInputMode.ANALOG,
+        DigitalInputMode.EXT_IN_1,
+    }
+)
 
-_GEN1_DIGITAL_FULL = _GEN1_DIGITAL | frozenset({
-    DigitalInputMode.RF,
-    DigitalInputMode.EXT_IN_2,
-})
+_GEN1_DIGITAL_FULL = _GEN1_DIGITAL | frozenset(
+    {
+        DigitalInputMode.RF,
+        DigitalInputMode.EXT_IN_2,
+    }
+)
 
-_GEN2_DIGITAL = frozenset({
-    DigitalInputMode.AUTO,
-    DigitalInputMode.HDMI,
-    DigitalInputMode.DIGITAL,
-    DigitalInputMode.ANALOG,
-    DigitalInputMode.EXT_IN_1,
-})
+_GEN2_DIGITAL = frozenset(
+    {
+        DigitalInputMode.AUTO,
+        DigitalInputMode.HDMI,
+        DigitalInputMode.DIGITAL,
+        DigitalInputMode.ANALOG,
+        DigitalInputMode.EXT_IN_1,
+    }
+)
 
-_GEN3_DIGITAL = frozenset({
-    DigitalInputMode.AUTO,
-    DigitalInputMode.HDMI,
-    DigitalInputMode.DIGITAL,
-    DigitalInputMode.ANALOG,
-})
+_GEN3_DIGITAL = frozenset(
+    {
+        DigitalInputMode.AUTO,
+        DigitalInputMode.HDMI,
+        DigitalInputMode.DIGITAL,
+        DigitalInputMode.ANALOG,
+    }
+)
 
 # -- Common surround mode sets --
 
@@ -142,10 +156,13 @@ _MODERN_SURROUND = (
 
 AVR_3803 = ReceiverModel(
     name="AVR-3803 / AVC-3570 / AVR-2803",
-    input_sources=_LEGACY_SOURCES | frozenset({
-        InputSource.VCR_3,
-        InputSource.MD_TAPE2,
-    }),
+    input_sources=_LEGACY_SOURCES
+    | frozenset(
+        {
+            InputSource.VCR_3,
+            InputSource.MD_TAPE2,
+        }
+    ),
     digital_inputs=_GEN1_DIGITAL_FULL,
     surround_modes=_LEGACY_SURROUND,
     zone3_prefix="Z1",
@@ -161,12 +178,15 @@ AVR_3805 = ReceiverModel(
 
 AVR_987 = ReceiverModel(
     name="AVR-987",
-    input_sources=_LEGACY_SOURCES | frozenset({
-        InputSource.HDP,
-        InputSource.DVR,
-        InputSource.TV_CBL,
-        InputSource.NET_USB,
-    }),
+    input_sources=_LEGACY_SOURCES
+    | frozenset(
+        {
+            InputSource.HDP,
+            InputSource.DVR,
+            InputSource.TV_CBL,
+            InputSource.NET_USB,
+        }
+    ),
     digital_inputs=_GEN1_DIGITAL,
     surround_modes=_LEGACY_SURROUND,
     zone3_prefix="Z3",
@@ -177,23 +197,29 @@ AVR_987 = ReceiverModel(
 
 AVR_2308CI = ReceiverModel(
     name="AVR-2308CI / AVC-2308",
-    input_sources=_LEGACY_SOURCES | frozenset({
-        InputSource.HDP,
-        InputSource.DVR,
-        InputSource.TV_CBL,
-    }),
+    input_sources=_LEGACY_SOURCES
+    | frozenset(
+        {
+            InputSource.HDP,
+            InputSource.DVR,
+            InputSource.TV_CBL,
+        }
+    ),
     digital_inputs=_GEN1_DIGITAL,
     surround_modes=_TRANSITION_SURROUND,
 )
 
 AVR_2808CI = ReceiverModel(
     name="AVR-2808CI / AVC-2808 / AVR-988",
-    input_sources=_LEGACY_SOURCES | frozenset({
-        InputSource.HDP,
-        InputSource.DVR,
-        InputSource.TV_CBL,
-        InputSource.NET_USB,
-    }),
+    input_sources=_LEGACY_SOURCES
+    | frozenset(
+        {
+            InputSource.HDP,
+            InputSource.DVR,
+            InputSource.TV_CBL,
+            InputSource.NET_USB,
+        }
+    ),
     digital_inputs=_GEN1_DIGITAL,
     surround_modes=_TRANSITION_SURROUND,
     zone3_prefix="Z3",
@@ -201,16 +227,19 @@ AVR_2808CI = ReceiverModel(
 
 AVR_4308CI = ReceiverModel(
     name="AVR-4308CI",
-    input_sources=_LEGACY_SOURCES | frozenset({
-        InputSource.HDP,
-        InputSource.DVR,
-        InputSource.TV_CBL,
-        InputSource.NET_USB,
-        InputSource.DOCK,
-        InputSource.HDRADIO,
-        InputSource.XM,
-        InputSource.IPOD,
-    }),
+    input_sources=_LEGACY_SOURCES
+    | frozenset(
+        {
+            InputSource.HDP,
+            InputSource.DVR,
+            InputSource.TV_CBL,
+            InputSource.NET_USB,
+            InputSource.DOCK,
+            InputSource.HDRADIO,
+            InputSource.XM,
+            InputSource.IPOD,
+        }
+    ),
     digital_inputs=_GEN1_DIGITAL,
     surround_modes=_TRANSITION_SURROUND,
     zone3_prefix="Z3",
@@ -218,21 +247,23 @@ AVR_4308CI = ReceiverModel(
 
 AVR_3310CI = ReceiverModel(
     name="AVR-3310CI / AVR-990 / AVC-3310",
-    input_sources=frozenset({
-        InputSource.PHONO,
-        InputSource.CD,
-        InputSource.TUNER,
-        InputSource.DVD,
-        InputSource.TV,
-        InputSource.SAT_CBL,
-        InputSource.DVR,
-        InputSource.HDP,
-        InputSource.V_AUX,
-        InputSource.NET_USB,
-        InputSource.DOCK,
-        InputSource.HDRADIO,
-        InputSource.IPOD,
-    }),
+    input_sources=frozenset(
+        {
+            InputSource.PHONO,
+            InputSource.CD,
+            InputSource.TUNER,
+            InputSource.DVD,
+            InputSource.TV,
+            InputSource.SAT_CBL,
+            InputSource.DVR,
+            InputSource.HDP,
+            InputSource.V_AUX,
+            InputSource.NET_USB,
+            InputSource.DOCK,
+            InputSource.HDRADIO,
+            InputSource.IPOD,
+        }
+    ),
     digital_inputs=_GEN2_DIGITAL,
     surround_modes=_TRANSITION_SURROUND,
     zone3_prefix="Z3",
@@ -243,60 +274,64 @@ AVR_3310CI = ReceiverModel(
 
 AVR_X1000 = ReceiverModel(
     name="AVR-X1000 / AVR-E300",
-    input_sources=frozenset({
-        InputSource.CD,
-        InputSource.TUNER,
-        InputSource.DVD,
-        InputSource.BD,
-        InputSource.TV,
-        InputSource.SAT_CBL,
-        InputSource.MPLAY,
-        InputSource.GAME,
-        InputSource.V_AUX,
-        InputSource.AUX1,
-        InputSource.NET,
-        InputSource.USB_IPOD,
-        InputSource.PANDORA,
-        InputSource.SIRIUSXM,
-        InputSource.SPOTIFY,
-        InputSource.FLICKR,
-        InputSource.IRADIO,
-        InputSource.SERVER,
-        InputSource.FAVORITES,
-        InputSource.LASTFM,
-    }),
+    input_sources=frozenset(
+        {
+            InputSource.CD,
+            InputSource.TUNER,
+            InputSource.DVD,
+            InputSource.BD,
+            InputSource.TV,
+            InputSource.SAT_CBL,
+            InputSource.MPLAY,
+            InputSource.GAME,
+            InputSource.V_AUX,
+            InputSource.AUX1,
+            InputSource.NET,
+            InputSource.USB_IPOD,
+            InputSource.PANDORA,
+            InputSource.SIRIUSXM,
+            InputSource.SPOTIFY,
+            InputSource.FLICKR,
+            InputSource.IRADIO,
+            InputSource.SERVER,
+            InputSource.FAVORITES,
+            InputSource.LASTFM,
+        }
+    ),
     digital_inputs=_GEN3_DIGITAL,
     surround_modes=_MODERN_SURROUND,
 )
 
 AVR_X4000 = ReceiverModel(
     name="AVR-X4000",
-    input_sources=frozenset({
-        InputSource.PHONO,
-        InputSource.CD,
-        InputSource.TUNER,
-        InputSource.DVD,
-        InputSource.BD,
-        InputSource.TV,
-        InputSource.SAT_CBL,
-        InputSource.MPLAY,
-        InputSource.GAME,
-        InputSource.V_AUX,
-        InputSource.AUX1,
-        InputSource.AUX2,
-        InputSource.NET,
-        InputSource.BT,
-        InputSource.USB_IPOD,
-        InputSource.PANDORA,
-        InputSource.SIRIUSXM,
-        InputSource.SPOTIFY,
-        InputSource.FLICKR,
-        InputSource.IRADIO,
-        InputSource.SERVER,
-        InputSource.FAVORITES,
-        InputSource.LASTFM,
-        InputSource.HDRADIO,
-    }),
+    input_sources=frozenset(
+        {
+            InputSource.PHONO,
+            InputSource.CD,
+            InputSource.TUNER,
+            InputSource.DVD,
+            InputSource.BD,
+            InputSource.TV,
+            InputSource.SAT_CBL,
+            InputSource.MPLAY,
+            InputSource.GAME,
+            InputSource.V_AUX,
+            InputSource.AUX1,
+            InputSource.AUX2,
+            InputSource.NET,
+            InputSource.BT,
+            InputSource.USB_IPOD,
+            InputSource.PANDORA,
+            InputSource.SIRIUSXM,
+            InputSource.SPOTIFY,
+            InputSource.FLICKR,
+            InputSource.IRADIO,
+            InputSource.SERVER,
+            InputSource.FAVORITES,
+            InputSource.LASTFM,
+            InputSource.HDRADIO,
+        }
+    ),
     digital_inputs=_GEN3_DIGITAL,
     surround_modes=_MODERN_SURROUND,
     zone3_prefix="Z3",
@@ -304,32 +339,34 @@ AVR_X4000 = ReceiverModel(
 
 AVR_X4200W = ReceiverModel(
     name="AVR-X4200W / AVR-X3200W / AVR-X2200W / AVR-X1200W",
-    input_sources=frozenset({
-        InputSource.PHONO,
-        InputSource.CD,
-        InputSource.TUNER,
-        InputSource.DVD,
-        InputSource.BD,
-        InputSource.TV,
-        InputSource.SAT_CBL,
-        InputSource.MPLAY,
-        InputSource.GAME,
-        InputSource.V_AUX,
-        InputSource.AUX1,
-        InputSource.AUX2,
-        InputSource.NET,
-        InputSource.BT,
-        InputSource.USB_IPOD,
-        InputSource.PANDORA,
-        InputSource.SIRIUSXM,
-        InputSource.SPOTIFY,
-        InputSource.FLICKR,
-        InputSource.IRADIO,
-        InputSource.SERVER,
-        InputSource.FAVORITES,
-        InputSource.LASTFM,
-        InputSource.HDRADIO,
-    }),
+    input_sources=frozenset(
+        {
+            InputSource.PHONO,
+            InputSource.CD,
+            InputSource.TUNER,
+            InputSource.DVD,
+            InputSource.BD,
+            InputSource.TV,
+            InputSource.SAT_CBL,
+            InputSource.MPLAY,
+            InputSource.GAME,
+            InputSource.V_AUX,
+            InputSource.AUX1,
+            InputSource.AUX2,
+            InputSource.NET,
+            InputSource.BT,
+            InputSource.USB_IPOD,
+            InputSource.PANDORA,
+            InputSource.SIRIUSXM,
+            InputSource.SPOTIFY,
+            InputSource.FLICKR,
+            InputSource.IRADIO,
+            InputSource.SERVER,
+            InputSource.FAVORITES,
+            InputSource.LASTFM,
+            InputSource.HDRADIO,
+        }
+    ),
     digital_inputs=_GEN3_DIGITAL,
     surround_modes=(
         *_MODERN_SURROUND,
@@ -344,29 +381,38 @@ AVR_X4200W = ReceiverModel(
 
 AVR_X2700H = ReceiverModel(
     name="AVR-X2700H",
-    input_sources=frozenset({
-        InputSource.PHONO,
-        InputSource.CD,
-        InputSource.TUNER,
-        InputSource.DVD,
-        InputSource.BD,
-        InputSource.TV,
-        InputSource.SAT_CBL,
-        InputSource.MPLAY,
-        InputSource.GAME,
-        InputSource.AUX1,
-        InputSource.AUX2,
-        InputSource.NET,
-        InputSource.BT,
-        InputSource.USB_IPOD,
-        InputSource.EIGHT_K,
-    }),
+    input_sources=frozenset(
+        {
+            InputSource.PHONO,
+            InputSource.CD,
+            InputSource.TUNER,
+            InputSource.DVD,
+            InputSource.BD,
+            InputSource.TV,
+            InputSource.SAT_CBL,
+            InputSource.MPLAY,
+            InputSource.GAME,
+            InputSource.AUX1,
+            InputSource.AUX2,
+            InputSource.NET,
+            InputSource.BT,
+            InputSource.USB_IPOD,
+            InputSource.EIGHT_K,
+        }
+    ),
     digital_inputs=_GEN3_DIGITAL,
     surround_modes=(
         *_MODERN_SURROUND,
         "DOLBY ATMOS",
         "DTS:X",
         "DTS:X MSTR",
+    ),
+    unsupported_startup_queries=frozenset(
+        {
+            "SR",
+            "TF",
+            "TP",
+        }
     ),
 )
 

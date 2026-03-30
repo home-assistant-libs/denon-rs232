@@ -6,8 +6,7 @@ import asyncio
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
-from enum import Enum
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -15,227 +14,31 @@ if TYPE_CHECKING:
 
 import serialx
 
+from .const import (
+    BAUD_RATE,
+    COMMAND_TIMEOUT,
+    CR,
+    DigitalInputMode,
+    MAX_VOLUME_DB,
+    InputSource,
+    ModeSetting,
+    MIN_VOLUME_DB,
+    MULTI_RESPONSE_DELAY,
+    PROBE_TIMEOUT,
+    RoomEQ,
+    SurroundBack,
+    TunerBand,
+    TunerMode,
+    VOLUME_DB_RANGE,
+    ZONE3_PREFIX,
+    _MULTI_RESPONSE_PREFIXES,
+    _SINGLE_RESPONSE_PREFIXES,
+)
+from .state import DenonState, ZoneState
+
 _LOGGER = logging.getLogger(__name__)
 
-BAUD_RATE = 9600
-COMMAND_TIMEOUT = 2.0  # seconds to wait for a response
-MULTI_RESPONSE_DELAY = 0.3  # seconds to wait for multi-response query results
-PROBE_TIMEOUT = 0.8  # seconds to wait for each probe attempt
-CR = b"\r"
-
-# Volume range constants (dB)
-MIN_VOLUME_DB = -80.0
-MAX_VOLUME_DB = 18.0
-VOLUME_DB_RANGE = MAX_VOLUME_DB - MIN_VOLUME_DB  # 98.0
-
 _ZONE_VOL_RE = re.compile(r"^\d{2,3}$")
-
-# Prefixes that return a single response to "?", safe for _query().
-_SINGLE_RESPONSE_PREFIXES = ("PW", "ZM", "MV", "MU", "SI", "MS", "SD", "SV", "SR", "TF", "TP")
-
-# Prefixes that return multiple responses to "?", state populated via _process_message.
-_MULTI_RESPONSE_PREFIXES = ("CV", "PS", "TM", "Z2", "Z1")
-
-# Zone 3 prefix: legacy models (AVR-3803/3805) use "Z1", modern models use "Z3".
-ZONE3_PREFIX = "Z3"
-
-
-class PowerState(Enum):
-    ON = "ON"
-    STANDBY = "STANDBY"
-
-
-class InputSource(Enum):
-    """Input sources available on the Denon receiver.
-
-    Not all sources are available on every model. Use probe_sources() or
-    a ReceiverModel definition to determine which sources a receiver supports.
-    """
-
-    # Legacy sources (~2003-2007)
-    PHONO = "PHONO"
-    CD = "CD"
-    TUNER = "TUNER"
-    DVD = "DVD"
-    VDP = "VDP"
-    TV = "TV"
-    DBS_SAT = "DBS/SAT"
-    VCR_1 = "VCR-1"
-    VCR_2 = "VCR-2"
-    VCR_3 = "VCR-3"
-    V_AUX = "V.AUX"
-    CDR_TAPE1 = "CDR/TAPE1"
-    MD_TAPE2 = "MD/TAPE2"
-
-    # Transition era (~2006-2009)
-    HDP = "HDP"
-    DVR = "DVR"
-    TV_CBL = "TV/CBL"
-    SAT = "SAT"
-    NET_USB = "NET/USB"
-    DOCK = "DOCK"
-    IPOD = "IPOD"
-
-    # Modern era (~2012-2016)
-    BD = "BD"
-    SAT_CBL = "SAT/CBL"
-    MPLAY = "MPLAY"
-    GAME = "GAME"
-    AUX1 = "AUX1"
-    AUX2 = "AUX2"
-    NET = "NET"
-    BT = "BT"
-    USB_IPOD = "USB/IPOD"
-    EIGHT_K = "8K"
-
-    # Streaming / online services
-    PANDORA = "PANDORA"
-    SIRIUSXM = "SIRIUSXM"
-    SPOTIFY = "SPOTIFY"
-    FLICKR = "FLICKR"
-    IRADIO = "IRADIO"
-    SERVER = "SERVER"
-    FAVORITES = "FAVORITES"
-    LASTFM = "LASTFM"
-
-    # Radio services (region-specific)
-    XM = "XM"
-    SIRIUS = "SIRIUS"
-    HDRADIO = "HDRADIO"
-    DAB = "DAB"
-
-
-class DigitalInputMode(Enum):
-    """Digital input modes."""
-
-    AUTO = "AUTO"
-    # Gen 1 (legacy ~2003-2007)
-    PCM = "PCM"
-    DTS = "DTS"
-    RF = "RF"
-    ANALOG = "ANALOG"
-    EXT_IN_1 = "EXT.IN-1"
-    EXT_IN_2 = "EXT.IN-2"
-    # Gen 2+ (~2009+)
-    HDMI = "HDMI"
-    DIGITAL = "DIGITAL"
-
-
-class SurroundBack(Enum):
-    """Surround back speaker modes."""
-
-    MTRX_ON = "MTRX ON"
-    NON_MTRX = "NON MTRX"
-    PL2X_CINEMA = "PL2X CINEMA"
-    PL2X_MUSIC = "PL2X MUSIC"
-    OFF = "OFF"
-
-
-class ModeSetting(Enum):
-    """Decoder mode settings (for PL2/PL2x/NEO:6)."""
-
-    MUSIC = "MUSIC"
-    CINEMA = "CINEMA"
-    GAME = "GAME"
-    PRO_LOGIC = "PRO LOGIC"
-
-
-class RoomEQ(Enum):
-    """Room EQ modes."""
-
-    NORMAL = "NORMAL"
-    FRONT = "FRONT"
-    FLAT = "FLAT"
-    MANUAL = "MANUAL"
-    OFF = "OFF"
-
-
-class TunerBand(Enum):
-    """Tuner bands."""
-
-    AM = "AM"
-    FM = "FM"
-
-
-class TunerMode(Enum):
-    """Tuning modes."""
-
-    AUTO = "AUTO"
-    MANUAL = "MANUAL"
-
-
-@dataclass
-class ZoneState:
-    """State for Zone 2 or Zone 3.
-
-    Updated via events only. No individual query method is available because
-    zone queries return multiple responses (power, source, volume).
-    """
-
-    power: bool | None = None
-    source: InputSource | None = None
-    volume: float | None = None
-
-    def copy(self) -> ZoneState:
-        return replace(self)
-
-
-@dataclass
-class DenonState:
-    """Current state of the Denon receiver.
-
-    All fields are populated at startup by querying the receiver, and then
-    kept up to date via events. Fields marked "event-only" cannot be queried
-    individually but are still populated from multi-response queries at startup.
-    """
-
-    # Core (queryable)
-    power: PowerState | None = None
-    main_zone: bool | None = None
-    mute: bool | None = None
-    volume: float | None = None
-    volume_max: float | None = None
-    volume_min: float | None = None
-    input_source: InputSource | None = None
-    #: Surround mode name. Kept as str because the receiver returns many
-    #: combined mode names (e.g. "DOLBY D+PL2X C", "M CH IN+PL2X M").
-    surround_mode: str | None = None
-
-    # Channel volumes. Event-only. Keyed by channel: FL, FR, C, SW, SL, SR, SBL, SBR, SB.
-    channel_volumes: dict[str, float] = field(default_factory=dict)
-
-    # Parameter settings. Event-only. Populated from PS? responses and PS events.
-    tone_defeat: bool | None = None
-    surround_back: SurroundBack | None = None
-    cinema_eq: bool | None = None
-    mode_setting: ModeSetting | None = None
-    #: Event-only. The receiver does not include room_eq in PS? responses.
-    room_eq: RoomEQ | None = None
-
-    # Digital / video / rec (queryable)
-    digital_input: DigitalInputMode | None = None
-    video_select: InputSource | None = None
-    rec_select: InputSource | None = None
-
-    # Tuner (frequency and preset are queryable; band and mode are event-only)
-    tuner_frequency: str | None = None
-    tuner_preset: str | None = None
-    #: Event-only. Updated from TM events.
-    tuner_band: TunerBand | None = None
-    #: Event-only. Updated from TM events. AUTO or MANUAL.
-    tuner_mode: TunerMode | None = None
-
-    # Zones. Event-only. Populated from Z2?/Z1? responses and zone events.
-    zone2: ZoneState = field(default_factory=ZoneState)
-    zone3: ZoneState = field(default_factory=ZoneState)
-
-    def copy(self) -> DenonState:
-        return replace(
-            self,
-            channel_volumes=dict(self.channel_volumes),
-            zone2=replace(self.zone2),
-            zone3=replace(self.zone3),
-        )
 
 
 # -- Volume helpers --
@@ -318,7 +121,9 @@ class DenonReceiver:
     ) -> None:
         self._port = port
         self._model = model
-        self._zone3_prefix = model.zone3_prefix or ZONE3_PREFIX if model else zone3_prefix
+        self._zone3_prefix = (
+            model.zone3_prefix or ZONE3_PREFIX if model else zone3_prefix
+        )
         self._reader: asyncio.StreamReader | None = None
         self._writer: serialx.SerialStreamWriter | None = None
         self._read_task: asyncio.Task | None = None
@@ -365,11 +170,22 @@ class DenonReceiver:
                 f"No response from receiver on {self._port}"
             ) from None
 
-        # Query all remaining state so we have a full picture before returning.
+        _LOGGER.info("Connected to Denon receiver on %s", self._port)
+
+    async def disconnect(self) -> None:
+        """Close the serial connection."""
+        await self._teardown()
+        _LOGGER.info("Disconnected from Denon receiver")
+
+    async def query_state(self) -> None:
+        """Query all initial state from the receiver."""
         # Single-response prefixes use _query() to wait for the response.
+        unsupported_queries = (
+            self._model.unsupported_startup_queries if self._model is not None else ()
+        )
         for prefix in _SINGLE_RESPONSE_PREFIXES:
-            if prefix == "PW":
-                continue  # Already queried above
+            if prefix == "PW" or prefix in unsupported_queries:
+                continue
             try:
                 await self._query(prefix)
             except TimeoutError:
@@ -377,21 +193,17 @@ class DenonReceiver:
 
         # Multi-response prefixes send the query and wait briefly for all
         # responses to arrive (protocol guarantees responses within 200ms).
-        # Replace Z1 with the configured zone3 prefix (Z3 for modern models).
-        multi_prefixes = tuple(
-            self._zone3_prefix if p == "Z1" else p
-            for p in _MULTI_RESPONSE_PREFIXES
-        )
-        for prefix in multi_prefixes:
+        for prefix in _MULTI_RESPONSE_PREFIXES:
+            if prefix == "Z1":
+                if self._model is not None and self._model.zone3_prefix is None:
+                    continue
+                prefix = self._zone3_prefix
+
+            if prefix in unsupported_queries:
+                continue
+
             await self._send_command(prefix, "?")
             await asyncio.sleep(MULTI_RESPONSE_DELAY)
-
-        _LOGGER.info("Connected to Denon receiver on %s", self._port)
-
-    async def disconnect(self) -> None:
-        """Close the serial connection."""
-        await self._teardown()
-        _LOGGER.info("Disconnected from Denon receiver")
 
     # -- Power commands --
 
@@ -401,9 +213,13 @@ class DenonReceiver:
     async def power_standby(self) -> None:
         await self._send_command("PW", "STANDBY")
 
-    async def query_power(self) -> PowerState:
+    async def query_power(self) -> bool:
         resp = await self._query("PW")
-        return PowerState(resp)
+        if resp == "ON":
+            return True
+        if resp == "STANDBY":
+            return False
+        raise ValueError(f"Unknown power state: {resp}")
 
     # -- Main zone commands --
 
@@ -586,13 +402,13 @@ class DenonReceiver:
 
     # -- Zone 2 commands --
 
-    async def zone2_on(self) -> None:
+    async def zone2_power_on(self) -> None:
         await self._send_command("Z2", "ON")
 
-    async def zone2_off(self) -> None:
+    async def zone2_power_standby(self) -> None:
         await self._send_command("Z2", "OFF")
 
-    async def zone2_select_source(self, source: InputSource) -> None:
+    async def zone2_select_input_source(self, source: InputSource) -> None:
         await self._send_command("Z2", source.value)
 
     async def zone2_volume_up(self) -> None:
@@ -607,13 +423,13 @@ class DenonReceiver:
 
     # -- Zone 3 commands (prefix: Z1 for AVR-3803/3805, Z3 for modern models) --
 
-    async def zone3_on(self) -> None:
+    async def zone3_power_on(self) -> None:
         await self._send_command(self._zone3_prefix, "ON")
 
-    async def zone3_off(self) -> None:
+    async def zone3_power_standby(self) -> None:
         await self._send_command(self._zone3_prefix, "OFF")
 
-    async def zone3_select_source(self, source: InputSource) -> None:
+    async def zone3_select_input_source(self, source: InputSource) -> None:
         await self._send_command(self._zone3_prefix, source.value)
 
     async def zone3_volume_up(self) -> None:
@@ -814,9 +630,11 @@ class DenonReceiver:
         changed = False
 
         if prefix == "PW":
-            try:
-                changed = self._set_state_value("power", PowerState(param))
-            except ValueError:
+            if param == "ON":
+                changed = self._set_state_value("power", True)
+            elif param == "STANDBY":
+                changed = self._set_state_value("power", False)
+            else:
                 _LOGGER.warning("Unknown power state: %s", param)
 
         elif prefix == "ZM":
@@ -951,9 +769,7 @@ class DenonReceiver:
             return self._set_state_value("cinema_eq", False)
         elif param.startswith("MODE : "):
             try:
-                return self._set_state_value(
-                    "mode_setting", ModeSetting(param[7:])
-                )
+                return self._set_state_value("mode_setting", ModeSetting(param[7:]))
             except ValueError:
                 _LOGGER.warning("Unknown mode setting: %s", param)
                 return False
@@ -980,11 +796,13 @@ class DenonReceiver:
                 return self._set_attr_value(zone, "volume", _parse_volume_param(param))
             except (ValueError, IndexError):
                 return False
+        elif param.startswith("SLP"):
+            return False
         elif param == "SOURCE":
-            return self._set_attr_value(zone, "source", None)
+            return self._set_attr_value(zone, "input_source", None)
         else:
             try:
-                return self._set_attr_value(zone, "source", InputSource(param))
+                return self._set_attr_value(zone, "input_source", InputSource(param))
             except ValueError:
                 _LOGGER.warning("Unknown zone source: %s", param)
                 return False

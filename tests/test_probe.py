@@ -40,7 +40,11 @@ async def test_probe_sources_restores_original(receiver, mock_serial):
     await receiver.probe_sources()
 
     # Last SI command written should be the restore to CD
-    si_commands = [d for d in mock_serial.written_data if d.startswith(b"SI") and not d.endswith(b"?\r")]
+    si_commands = [
+        d
+        for d in mock_serial.written_data
+        if d.startswith(b"SI") and not d.endswith(b"?\r")
+    ]
     assert si_commands[-1] == b"SICD\r"
     # State should be back to CD
     assert receiver.state.input_source == InputSource.CD

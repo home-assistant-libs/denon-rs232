@@ -19,8 +19,9 @@ from denon_rs232 import DenonReceiver, InputSource
 async def main():
     receiver = DenonReceiver("/dev/ttyUSB0")
     await receiver.connect()
+    await receiver.query_state()
 
-    # State is fully populated after connect()
+    # State is fully populated after query_state()
     print(f"Power: {receiver.state.power}")
     print(f"Volume: {receiver.state.volume} dB")
     print(f"Input: {receiver.state.input_source}")
@@ -51,13 +52,14 @@ python -m denon_rs232 /dev/ttyUSB0 --zone3-prefix Z1
 
 ## Features
 
-### Full state on connect
+### Full state after query
 
-When `connect()` returns, all receiver state has been queried and is available via the `state` property. After that, state is kept up to date via events from the receiver.
+`connect()` only opens and verifies the serial connection. Call `query_state()` when you want the current receiver state populated into the `state` property. After that, state is kept up to date via events from the receiver.
 
 ```python
 receiver = DenonReceiver("/dev/ttyUSB0")
 await receiver.connect()
+await receiver.query_state()
 
 state = receiver.state
 state.power          # PowerState.ON / PowerState.STANDBY
@@ -247,21 +249,21 @@ Tuner band and mode are available via events (`state.tuner_band`, `state.tuner_m
 
 ### Multi-zone
 
-Zone 2 and Zone 3 can be controlled independently. Zone state (power, source, volume) is populated at startup and updated via events.
+Zone 2 and Zone 3 can be controlled independently. Zone state (power, source, volume) is populated by `query_state()` and updated via events.
 
 ```python
 # Zone 2
-await receiver.zone2_on()
-await receiver.zone2_off()
-await receiver.zone2_select_source(InputSource.TUNER)
+await receiver.zone2_power_on()
+await receiver.zone2_power_standby()
+await receiver.zone2_select_input_source(InputSource.TUNER)
 await receiver.zone2_set_volume(-30.0)
 await receiver.zone2_volume_up()
 await receiver.zone2_volume_down()
 
 # Zone 3
-await receiver.zone3_on()
-await receiver.zone3_off()
-await receiver.zone3_select_source(InputSource.CD)
+await receiver.zone3_power_on()
+await receiver.zone3_power_standby()
+await receiver.zone3_select_input_source(InputSource.CD)
 await receiver.zone3_set_volume(-35.0)
 await receiver.zone3_volume_up()
 await receiver.zone3_volume_down()

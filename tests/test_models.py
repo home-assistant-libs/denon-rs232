@@ -172,6 +172,10 @@ def test_avr_x2700h_no_zone3():
     assert AVR_X2700H.zone3_prefix is None
 
 
+def test_avr_x2700h_skips_known_unsupported_startup_queries():
+    assert AVR_X2700H.unsupported_startup_queries == {"SR", "TF", "TP"}
+
+
 # -- General model checks --
 
 
@@ -192,4 +196,7 @@ def test_all_models_have_auto_digital():
 def test_all_models_have_cd():
     """Every model should support CD input."""
     for model in ALL_MODELS:
-        assert InputSource.CD in model.digital_inputs or InputSource.CD in model.input_sources, model.name
+        assert (
+            InputSource.CD in model.digital_inputs
+            or InputSource.CD in model.input_sources
+        ), model.name

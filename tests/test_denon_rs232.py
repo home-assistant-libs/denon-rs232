@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from conftest import MockSerialConnection, connect_with_defaults
+from conftest import (
+    DEFAULT_QUERY_RESPONSES,
+    MockSerialConnection,
+    connect_with_defaults,
+)
 
 from denon_rs232 import (
     _MULTI_RESPONSE_PREFIXES,
@@ -15,7 +19,6 @@ from denon_rs232 import (
     DigitalInputMode,
     InputSource,
     ModeSetting,
-    PowerState,
     RoomEQ,
     SurroundBack,
     TunerBand,
@@ -25,6 +28,7 @@ from denon_rs232 import (
     _parse_volume_param,
     _volume_to_param,
 )
+from denon_rs232.models import AVR_X2700H
 
 
 # -- Master volume conversion tests --
@@ -151,7 +155,7 @@ def test_initial_state():
 
 def test_state_copy():
     state = DenonState(
-        power=PowerState.ON,
+        power=True,
         volume=0.0,
         volume_max=18.0,
         volume_min=-80.0,
@@ -159,17 +163,17 @@ def test_state_copy():
     state.channel_volumes["FL"] = 0.0
     state.zone2.power = True
     copy = state.copy()
-    assert copy.power is PowerState.ON
+    assert copy.power is True
     assert copy.volume == 0.0
     assert copy.volume_max == 18.0
     assert copy.volume_min == -80.0
     assert copy.channel_volumes == {"FL": 0.0}
     assert copy.zone2.power is True
     # Verify deep copy
-    copy.power = PowerState.STANDBY
+    copy.power = False
     copy.channel_volumes["FL"] = 5.0
     copy.zone2.power = False
-    assert state.power is PowerState.ON
+    assert state.power is True
     assert state.channel_volumes["FL"] == 0.0
     assert state.zone2.power is True
 
@@ -177,14 +181,28 @@ def test_state_copy():
 # -- Connection tests --
 
 
-async def test_connect_verifies_power(receiver):
-    assert receiver.state.power == PowerState.ON
+async def test_connect_verifies_power(mock_serial):
+    recv = DenonReceiver("/dev/ttyUSB0")
+
+    async def fake_open(*args, **kwargs):
+        return mock_serial.reader, mock_serial.writer
+
+    mock_serial._query_responses = dict(DEFAULT_QUERY_RESPONSES)
+
+    with patch("denon_rs232.serialx.open_serial_connection", side_effect=fake_open):
+        await recv.connect()
+
+    assert recv.state.power is True
+    sent_queries = [data.decode("ascii") for data in mock_serial.written_data]
+    assert sent_queries == ["PW?\r"]
+
+    await recv.disconnect()
 
 
-async def test_connect_populates_full_state(receiver):
-    """Connect should populate state from all startup queries."""
+async def test_query_state_populates_full_state(receiver):
+    """query_state() should populate state from all startup queries."""
     state = receiver.state
-    assert state.power == PowerState.ON
+    assert state.power is True
     assert state.main_zone is True
     assert state.volume == 0.0
     assert state.volume_max == 18.0
@@ -209,8 +227,8 @@ async def test_connect_populates_full_state(receiver):
     assert state.zone3.power is False
 
 
-async def test_connect_queries_all_prefixes(mock_serial):
-    """Connect should send ? queries for all prefixes."""
+async def test_query_state_queries_all_prefixes(mock_serial):
+    """query_state() should send ? queries for all startup prefixes."""
     recv = await connect_with_defaults(mock_serial)
 
     # Check all expected query commands were sent.
@@ -228,6 +246,30 @@ async def test_connect_queries_all_prefixes(mock_serial):
     await recv.disconnect()
 
 
+async def test_query_state_skips_known_unsupported_model_queries(mock_serial):
+    """Known model capabilities should trim unsupported startup probes."""
+    recv = await connect_with_defaults(mock_serial, model=AVR_X2700H)
+
+    sent_queries = {
+        data[:-1].decode("ascii").replace("?", "")
+        for data in mock_serial.written_data
+        if data.endswith(b"?\r")
+    }
+
+    assert "SR" not in sent_queries
+    assert "TF" not in sent_queries
+    assert "TP" not in sent_queries
+    assert "Z3" not in sent_queries
+
+    state = recv.state
+    assert state.rec_select is None
+    assert state.tuner_frequency is None
+    assert state.tuner_preset is None
+    assert state.zone3.power is None
+
+    await recv.disconnect()
+
+
 async def test_connect_timeout_raises():
     recv = DenonReceiver("/dev/ttyUSB0")
     mock = MockSerialConnection()
@@ -236,9 +278,7 @@ async def test_connect_timeout_raises():
     async def fake_open(*args, **kwargs):
         return mock.reader, mock.writer
 
-    with patch(
-        "denon_rs232.serialx.open_serial_connection", side_effect=fake_open
-    ):
+    with patch("denon_rs232.serialx.open_serial_connection", side_effect=fake_open):
         with pytest.raises(ConnectionError, match="No response"):
             await recv.connect()
 
@@ -483,18 +523,18 @@ async def test_set_tuner_mode(receiver, mock_serial):
 # -- Zone 2 command tests --
 
 
-async def test_zone2_on(receiver, mock_serial):
-    await receiver.zone2_on()
+async def test_zone2_power_on(receiver, mock_serial):
+    await receiver.zone2_power_on()
     assert b"Z2ON\r" in mock_serial.written_data
 
 
-async def test_zone2_off(receiver, mock_serial):
-    await receiver.zone2_off()
+async def test_zone2_power_standby(receiver, mock_serial):
+    await receiver.zone2_power_standby()
     assert b"Z2OFF\r" in mock_serial.written_data
 
 
-async def test_zone2_select_source(receiver, mock_serial):
-    await receiver.zone2_select_source(InputSource.CD)
+async def test_zone2_select_input_source(receiver, mock_serial):
+    await receiver.zone2_select_input_source(InputSource.CD)
     assert b"Z2CD\r" in mock_serial.written_data
 
 
@@ -511,18 +551,18 @@ async def test_zone2_set_volume(receiver, mock_serial):
 # -- Zone 3 command tests (default Z3 prefix) --
 
 
-async def test_zone3_on(receiver, mock_serial):
-    await receiver.zone3_on()
+async def test_zone3_power_on(receiver, mock_serial):
+    await receiver.zone3_power_on()
     assert b"Z3ON\r" in mock_serial.written_data
 
 
-async def test_zone3_off(receiver, mock_serial):
-    await receiver.zone3_off()
+async def test_zone3_power_standby(receiver, mock_serial):
+    await receiver.zone3_power_standby()
     assert b"Z3OFF\r" in mock_serial.written_data
 
 
-async def test_zone3_select_source(receiver, mock_serial):
-    await receiver.zone3_select_source(InputSource.TUNER)
+async def test_zone3_select_input_source(receiver, mock_serial):
+    await receiver.zone3_select_input_source(InputSource.TUNER)
     assert b"Z3TUNER\r" in mock_serial.written_data
 
 
@@ -542,7 +582,7 @@ async def test_query_power(receiver, mock_serial):
     task = asyncio.create_task(respond())
     result = await receiver.query_power()
     await task
-    assert result == PowerState.STANDBY
+    assert result is False
 
 
 async def test_query_volume(receiver, mock_serial):
@@ -1055,7 +1095,7 @@ async def test_zone2_source_event(receiver, mock_serial):
     mock_serial.inject_response("Z2DVD")
     await asyncio.sleep(0.1)
 
-    assert states[-1].zone2.source == InputSource.DVD
+    assert states[-1].zone2.input_source == InputSource.DVD
 
 
 async def test_zone2_volume_event(receiver, mock_serial):
@@ -1090,7 +1130,7 @@ async def test_zone2_source_cancel_event(receiver, mock_serial):
     mock_serial.inject_response("Z2SOURCE")
     await asyncio.sleep(0.1)
 
-    assert states[-1].zone2.source is None
+    assert states[-1].zone2.input_source is None
 
 
 # -- Event tests: zone 3 (both Z3 and Z1 prefixes) --
@@ -1113,7 +1153,19 @@ async def test_zone3_source_event(receiver, mock_serial):
     mock_serial.inject_response("Z3TUNER")
     await asyncio.sleep(0.1)
 
-    assert states[-1].zone3.source == InputSource.TUNER
+    assert states[-1].zone3.input_source == InputSource.TUNER
+
+
+async def test_zone3_sleep_timer_event_ignored(receiver, mock_serial, caplog):
+    """Zone sleep timer payloads should not be treated as sources."""
+    states: list[DenonState] = []
+    receiver.subscribe(lambda s: states.append(s))
+
+    mock_serial.inject_response("Z3SLPOFF")
+    await asyncio.sleep(0.1)
+
+    assert len(states) == 0
+    assert "Unknown zone source: SLPOFF" not in caplog.text
 
 
 async def test_zone3_volume_event(receiver, mock_serial):
@@ -1169,7 +1221,7 @@ async def test_power_event(receiver, mock_serial):
     mock_serial.inject_response("PWSTANDBY")
     await asyncio.sleep(0.1)
 
-    assert states[-1].power == PowerState.STANDBY
+    assert states[-1].power is False
 
 
 async def test_duplicate_power_event_no_state_change(receiver, mock_serial):
@@ -1238,13 +1290,14 @@ async def test_multiple_events(receiver, mock_serial):
     await asyncio.sleep(0.1)
 
     assert len(states) == 3
-    assert states[-1].power == PowerState.STANDBY
+    assert states[-1].power is False
     assert states[-1].volume == -5.0
     assert states[-1].mute is True
 
 
 async def test_bad_callback_doesnt_break(receiver, mock_serial):
     """An exception in a subscriber shouldn't prevent other processing."""
+
     def bad_callback(state):
         raise RuntimeError("oops")
 

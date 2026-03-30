@@ -8,6 +8,7 @@ import pytest
 
 import denon_rs232
 from denon_rs232 import DenonReceiver
+from denon_rs232.models import ReceiverModel
 
 # Speed up tests by reducing delays
 denon_rs232.COMMAND_TIMEOUT = 0.1
@@ -82,6 +83,7 @@ async def receiver(mock_serial):
 
     with patch("denon_rs232.serialx.open_serial_connection", side_effect=fake_open):
         await recv.connect()
+        await recv.query_state()
 
     # Clear auto-responses so tests can inject specific responses manually
     mock_serial._query_responses.clear()
@@ -92,15 +94,18 @@ async def receiver(mock_serial):
         await recv.disconnect()
 
 
-async def connect_with_defaults(mock: MockSerialConnection) -> DenonReceiver:
+async def connect_with_defaults(
+    mock: MockSerialConnection, model: ReceiverModel | None = None
+) -> DenonReceiver:
     """Helper: connect a receiver with default auto-responses."""
     mock._query_responses = dict(DEFAULT_QUERY_RESPONSES)
-    recv = DenonReceiver("/dev/ttyUSB0")
+    recv = DenonReceiver("/dev/ttyUSB0", model=model)
 
     async def fake_open(*args, **kwargs):
         return mock.reader, mock.writer
 
     with patch("denon_rs232.serialx.open_serial_connection", side_effect=fake_open):
         await recv.connect()
+        await recv.query_state()
 
     return recv

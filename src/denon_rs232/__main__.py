@@ -38,10 +38,16 @@ def _print_state(state: DenonState) -> None:
     print("=== Receiver Status ===")
     print()
 
-    print(f"  Power:           {_format_enum(state.power)}")
-    print(f"  Main zone:       {'ON' if state.main_zone else 'OFF' if state.main_zone is not None else '?'}")
+    print(
+        f"  Power:           {'ON' if state.power else 'STANDBY' if state.power is not None else '?'}"
+    )
+    print(
+        f"  Main zone:       {'ON' if state.main_zone else 'OFF' if state.main_zone is not None else '?'}"
+    )
     print(f"  Volume:          {_format_db(state.volume)}")
-    print(f"  Mute:            {'ON' if state.mute else 'OFF' if state.mute is not None else '?'}")
+    print(
+        f"  Mute:            {'ON' if state.mute else 'OFF' if state.mute is not None else '?'}"
+    )
     print(f"  Input source:    {_format_enum(state.input_source)}")
     print(f"  Surround mode:   {state.surround_mode or '?'}")
     print(f"  Digital input:   {_format_enum(state.digital_input)}")
@@ -95,8 +101,8 @@ def _print_state(state: DenonState) -> None:
             print()
             print(f"  {label}:")
             print(f"    Power:   {'ON' if zone.power else 'OFF'}")
-            if zone.source is not None:
-                print(f"    Source:  {zone.source.value}")
+            if zone.input_source is not None:
+                print(f"    Source:  {zone.input_source.value}")
             if zone.volume is not None:
                 print(f"    Volume:  {_format_db(zone.volume)}")
 
@@ -109,6 +115,8 @@ async def _run(port: str, probe: bool, zone3_prefix: str) -> None:
     print(f"Connecting to {port}...")
     try:
         await receiver.connect()
+        print("Querying receiver state...")
+        await receiver.query_state()
     except ConnectionError as err:
         print(f"Error: {err}", file=sys.stderr)
         sys.exit(1)

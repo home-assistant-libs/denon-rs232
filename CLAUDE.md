@@ -21,8 +21,9 @@ tests/
 
 - Uses `serialx` (`open_serial_connection`) for async serial I/O (9600 baud, 8N1).
 - Denon RS232 protocol: `PREFIX + PARAM + CR (0x0D)`. Query with `PREFIX?`. Responses within 200ms.
-- `connect()` queries all state before returning (single-response via `_query()`, multi-response via fire-and-forget + `asyncio.sleep(MULTI_RESPONSE_DELAY)`).
-- After connect, state is kept current via a background `_read_loop` that processes events.
+- `connect()` only opens/verifies the serial connection via `PW?`.
+- `query_state()` fetches current receiver state (single-response via `_query()`, multi-response via fire-and-forget + `asyncio.sleep(MULTI_RESPONSE_DELAY)`).
+- After querying, state is kept current via a background `_read_loop` that processes events.
 - `state` property returns a deep copy of `DenonState`.
 - Subscribers get `DenonState` on changes, `None` on disconnect.
 

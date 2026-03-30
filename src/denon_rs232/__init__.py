@@ -373,7 +373,7 @@ class DenonReceiver:
             try:
                 await self._query(prefix)
             except TimeoutError:
-                _LOGGER.warning("No response from receiver for %s?", prefix)
+                pass
 
         # Multi-response prefixes send the query and wait briefly for all
         # responses to arrive (protocol guarantees responses within 200ms).

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import denon_rs232
+import denon_rs232.receiver as denon_receiver
 from denon_rs232 import DenonReceiver
 from denon_rs232.models import ReceiverModel
 
@@ -14,6 +15,9 @@ from denon_rs232.models import ReceiverModel
 denon_rs232.COMMAND_TIMEOUT = 0.1
 denon_rs232.MULTI_RESPONSE_DELAY = 0.01
 denon_rs232.PROBE_TIMEOUT = 0.01
+denon_receiver.COMMAND_TIMEOUT = 0.1
+denon_receiver.MULTI_RESPONSE_DELAY = 0.01
+denon_receiver.PROBE_TIMEOUT = 0.01
 
 # Default responses for all query prefixes during startup.
 DEFAULT_QUERY_RESPONSES: dict[str, list[str]] = {
@@ -81,7 +85,10 @@ async def receiver(mock_serial):
     async def fake_open(*args, **kwargs):
         return mock_serial.reader, mock_serial.writer
 
-    with patch("denon_rs232.serialx.open_serial_connection", side_effect=fake_open):
+    with patch(
+        "denon_rs232.receiver.serialx.open_serial_connection",
+        side_effect=fake_open,
+    ):
         await recv.connect()
         await recv.query_state()
 
@@ -104,7 +111,10 @@ async def connect_with_defaults(
     async def fake_open(*args, **kwargs):
         return mock.reader, mock.writer
 
-    with patch("denon_rs232.serialx.open_serial_connection", side_effect=fake_open):
+    with patch(
+        "denon_rs232.receiver.serialx.open_serial_connection",
+        side_effect=fake_open,
+    ):
         await recv.connect()
         await recv.query_state()
 

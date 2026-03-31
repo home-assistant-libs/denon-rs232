@@ -6,7 +6,7 @@ Async Python library to control Denon AV receivers over RS232 serial.
 
 ```
 src/denon_rs232/
-  __init__.py    -- Main library: enums, DenonState, DenonReceiver class
+  __init__.py    -- Main library: enums, ReceiverState, DenonReceiver class
   models.py      -- ReceiverModel dataclass and per-model definitions
   __main__.py    -- CLI: python -m denon_rs232 PORT [--probe] [--zone3-prefix Z1|Z3]
 
@@ -24,8 +24,8 @@ tests/
 - `connect()` only opens/verifies the serial connection via `PW?`.
 - `query_state()` fetches current receiver state (single-response via `_query()`, multi-response via fire-and-forget + `asyncio.sleep(MULTI_RESPONSE_DELAY)`).
 - After querying, state is kept current via a background `_read_loop` that processes events.
-- `state` property returns a deep copy of `DenonState`.
-- Subscribers get `DenonState` on changes, `None` on disconnect.
+- `state` property returns a deep copy of `ReceiverState`.
+- Subscribers get `ReceiverState` on changes, `None` on disconnect.
 
 ## Key design decisions
 

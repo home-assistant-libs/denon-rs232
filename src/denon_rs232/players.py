@@ -102,6 +102,11 @@ class _BasePlayer:
             volume_to_param(db),
         )
 
+    async def query_power(self) -> bool:
+        """Query the power state."""
+        resp = await self._receiver._query(self._power_command)
+        return resp == "ON"
+
 
 class MainPlayer(_BasePlayer):
     """Stateful control surface for the receiver's main output."""
@@ -130,23 +135,6 @@ class MainPlayer(_BasePlayer):
     async def mute_off(self) -> None:
         """Unmute the main player."""
         await self._receiver._send_command("MU", "OFF")
-
-    async def query_power(self) -> bool:
-        """Query the main-zone power state."""
-        resp = await self._receiver._query("ZM")
-        return resp == "ON"
-
-    async def main_zone_on(self) -> None:
-        """Turn the main listening zone on."""
-        await self.power_on()
-
-    async def main_zone_off(self) -> None:
-        """Turn the main listening zone off."""
-        await self.power_standby()
-
-    async def query_main_zone(self) -> bool:
-        """Query the main listening zone power state."""
-        return await self.query_power()
 
     async def query_volume(self) -> float:
         """Query the current master volume."""

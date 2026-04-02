@@ -332,13 +332,8 @@ async def test_main_player_power_on(receiver, mock_serial):
     assert b"ZMON\r" in mock_serial.written_data
 
 
-async def test_main_zone_on(receiver, mock_serial):
-    await receiver.main.main_zone_on()
-    assert b"ZMON\r" in mock_serial.written_data
-
-
-async def test_main_zone_off(receiver, mock_serial):
-    await receiver.main.main_zone_off()
+async def test_main_player_power_standby(receiver, mock_serial):
+    await receiver.main.power_standby()
     assert b"ZMOFF\r" in mock_serial.written_data
 
 
@@ -648,7 +643,7 @@ async def test_query_mute(receiver, mock_serial):
     assert result is False
 
 
-async def test_query_main_zone(receiver, mock_serial):
+async def test_query_main_power(receiver, mock_serial):
     async def respond():
         await asyncio.sleep(0.05)
         mock_serial.inject_response("ZMON")

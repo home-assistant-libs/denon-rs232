@@ -38,37 +38,39 @@ def _print_state(state: ReceiverState) -> None:
     print("=== Receiver Status ===")
     print()
 
+    mz = state.main_zone
+
     print(
         f"  Power:           {'ON' if state.power else 'STANDBY' if state.power is not None else '?'}"
     )
     print(
-        f"  Main zone:       {'ON' if state.main_zone_power else 'OFF' if state.main_zone_power is not None else '?'}"
+        f"  Main zone:       {'ON' if mz.power else 'OFF' if mz.power is not None else '?'}"
     )
-    print(f"  Volume:          {_format_db(state.volume)}")
+    print(f"  Volume:          {_format_db(mz.volume)}")
     print(
-        f"  Mute:            {'ON' if state.mute else 'OFF' if state.mute is not None else '?'}"
+        f"  Mute:            {'ON' if mz.mute else 'OFF' if mz.mute is not None else '?'}"
     )
-    print(f"  Input source:    {_format_enum(state.input_source)}")
-    print(f"  Surround mode:   {state.surround_mode or '?'}")
-    print(f"  Digital input:   {_format_enum(state.digital_input)}")
+    print(f"  Input source:    {_format_enum(mz.input_source)}")
+    print(f"  Surround mode:   {mz.surround_mode or '?'}")
+    print(f"  Digital input:   {_format_enum(mz.digital_input)}")
 
-    if state.video_select is not None:
-        print(f"  Video select:    {_format_enum(state.video_select)}")
-    if state.rec_select is not None:
-        print(f"  Rec select:      {_format_enum(state.rec_select)}")
+    if mz.video_select is not None:
+        print(f"  Video select:    {_format_enum(mz.video_select)}")
+    if mz.rec_select is not None:
+        print(f"  Rec select:      {_format_enum(mz.rec_select)}")
 
     # Parameter settings
     ps_lines: list[str] = []
-    if state.tone_defeat is not None:
-        ps_lines.append(f"Tone defeat {'ON' if state.tone_defeat else 'OFF'}")
-    if state.surround_back is not None:
-        ps_lines.append(f"Surround back: {state.surround_back.value}")
-    if state.cinema_eq is not None:
-        ps_lines.append(f"Cinema EQ {'ON' if state.cinema_eq else 'OFF'}")
-    if state.mode_setting is not None:
-        ps_lines.append(f"Mode: {state.mode_setting.value}")
-    if state.room_eq is not None:
-        ps_lines.append(f"Room EQ: {state.room_eq.value}")
+    if mz.tone_defeat is not None:
+        ps_lines.append(f"Tone defeat {'ON' if mz.tone_defeat else 'OFF'}")
+    if mz.surround_back is not None:
+        ps_lines.append(f"Surround back: {mz.surround_back.value}")
+    if mz.cinema_eq is not None:
+        ps_lines.append(f"Cinema EQ {'ON' if mz.cinema_eq else 'OFF'}")
+    if mz.mode_setting is not None:
+        ps_lines.append(f"Mode: {mz.mode_setting.value}")
+    if mz.room_eq is not None:
+        ps_lines.append(f"Room EQ: {mz.room_eq.value}")
     if ps_lines:
         print()
         print("  Parameters:")
@@ -76,24 +78,24 @@ def _print_state(state: ReceiverState) -> None:
             print(f"    {line}")
 
     # Channel volumes
-    if state.channel_volumes:
+    if mz.channel_volumes:
         print()
         print("  Channel volumes:")
-        for ch, db in sorted(state.channel_volumes.items()):
+        for ch, db in sorted(mz.channel_volumes.items()):
             print(f"    {ch:>3s}:  {_format_db(db)}")
 
     # Tuner
-    if state.tuner_frequency or state.tuner_preset:
+    if mz.tuner_frequency or mz.tuner_preset:
         print()
         print("  Tuner:")
-        if state.tuner_band:
-            print(f"    Band:       {state.tuner_band.value}")
-        if state.tuner_frequency:
-            print(f"    Frequency:  {state.tuner_frequency}")
-        if state.tuner_preset:
-            print(f"    Preset:     {state.tuner_preset}")
-        if state.tuner_mode:
-            print(f"    Mode:       {state.tuner_mode.value}")
+        if mz.tuner_band:
+            print(f"    Band:       {mz.tuner_band.value}")
+        if mz.tuner_frequency:
+            print(f"    Frequency:  {mz.tuner_frequency}")
+        if mz.tuner_preset:
+            print(f"    Preset:     {mz.tuner_preset}")
+        if mz.tuner_mode:
+            print(f"    Mode:       {mz.tuner_mode.value}")
 
     # Zones
     for label, zone in [("Zone 2", state.zone_2), ("Zone 3", state.zone_3)]:

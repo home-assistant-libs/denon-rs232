@@ -33,7 +33,7 @@ from .protocol import (
     parse_channel_volume_param,
     parse_volume_param,
 )
-from .state import ReceiverState, ZoneState
+from .state import MainZoneState, ReceiverState, ZoneState
 
 if TYPE_CHECKING:
     from .models import ReceiverModel
@@ -62,7 +62,7 @@ class DenonReceiver:
         self._writer: serialx.SerialStreamWriter | None = None
         self._read_task: asyncio.Task | None = None
         self._state = ReceiverState()
-        self.main = MainPlayer(self, self._state)
+        self.main = MainPlayer(self, self._state.main_zone)
         self.zone_2 = ZonePlayer(
             self,
             self._state.zone_2,
@@ -184,7 +184,7 @@ class DenonReceiver:
         if timeout is None:
             timeout = PROBE_TIMEOUT
 
-        original = self._state.input_source
+        original = self._state.main_zone.input_source
         available: set[InputSource] = set()
 
         if original is not None:
@@ -323,8 +323,8 @@ class DenonReceiver:
         return True
 
     def _set_state_value(self, attr: str, new_value: object) -> bool:
-        """Set a ReceiverState attribute only when the value changed."""
-        return self._set_attr_value(self._state, attr, new_value)
+        """Set a MainZoneState attribute only when the value changed."""
+        return self._set_attr_value(self._state.main_zone, attr, new_value)
 
     def _process_message(self, message: str) -> None:
         """Parse and process a message from the receiver."""
@@ -347,14 +347,14 @@ class DenonReceiver:
 
         if prefix == "PW":
             if param == "ON":
-                changed = self._set_state_value("power", True)
+                changed = self._set_attr_value(self._state, "power", True)
             elif param == "STANDBY":
-                changed = self._set_state_value("power", False)
+                changed = self._set_attr_value(self._state, "power", False)
             else:
                 _LOGGER.warning("Unknown power state: %s", param)
 
         elif prefix == "ZM":
-            changed = self._set_state_value("main_zone_power", param == "ON")
+            changed = self._set_state_value("power", param == "ON")
 
         elif prefix == "MV":
             try:
@@ -391,8 +391,8 @@ class DenonReceiver:
             if sep and val not in ("UP", "DOWN"):
                 try:
                     new_value = parse_channel_volume_param(val)
-                    if self._state.channel_volumes.get(channel) != new_value:
-                        self._state.channel_volumes[channel] = new_value
+                    if self._state.main_zone.channel_volumes.get(channel) != new_value:
+                        self._state.main_zone.channel_volumes[channel] = new_value
                         changed = True
                 except (ValueError, IndexError):
                     _LOGGER.warning("Could not parse channel volume: %s", param)

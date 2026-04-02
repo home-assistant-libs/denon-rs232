@@ -15,6 +15,7 @@ from denon_rs232 import (
     _MULTI_RESPONSE_PREFIXES,
     _SINGLE_RESPONSE_PREFIXES,
     DenonReceiver,
+    MainZoneState,
     ReceiverState,
     DigitalInputMode,
     InputSource,
@@ -141,14 +142,14 @@ def test_channel_volume_roundtrip():
 def test_initial_state():
     state = ReceiverState()
     assert state.power is None
-    assert state.main_zone_power is None
-    assert state.mute is None
-    assert state.volume is None
-    assert state.volume_max is None
-    assert state.volume_min is None
-    assert state.input_source is None
-    assert state.surround_mode is None
-    assert state.channel_volumes == {}
+    assert state.main_zone.power is None
+    assert state.main_zone.mute is None
+    assert state.main_zone.volume is None
+    assert state.main_zone.volume_max is None
+    assert state.main_zone.volume_min is None
+    assert state.main_zone.input_source is None
+    assert state.main_zone.surround_mode is None
+    assert state.main_zone.channel_volumes == {}
     assert state.zone_2.power is None
     assert state.zone_3.power is None
 
@@ -156,25 +157,27 @@ def test_initial_state():
 def test_state_copy():
     state = ReceiverState(
         power=True,
-        volume=0.0,
-        volume_max=18.0,
-        volume_min=-80.0,
+        main_zone=MainZoneState(
+            volume=0.0,
+            volume_max=18.0,
+            volume_min=-80.0,
+        ),
     )
-    state.channel_volumes["FL"] = 0.0
+    state.main_zone.channel_volumes["FL"] = 0.0
     state.zone_2.power = True
     copy = state.copy()
     assert copy.power is True
-    assert copy.volume == 0.0
-    assert copy.volume_max == 18.0
-    assert copy.volume_min == -80.0
-    assert copy.channel_volumes == {"FL": 0.0}
+    assert copy.main_zone.volume == 0.0
+    assert copy.main_zone.volume_max == 18.0
+    assert copy.main_zone.volume_min == -80.0
+    assert copy.main_zone.channel_volumes == {"FL": 0.0}
     assert copy.zone_2.power is True
     # Verify deep copy
     copy.power = False
-    copy.channel_volumes["FL"] = 5.0
+    copy.main_zone.channel_volumes["FL"] = 5.0
     copy.zone_2.power = False
     assert state.power is True
-    assert state.channel_volumes["FL"] == 0.0
+    assert state.main_zone.channel_volumes["FL"] == 0.0
     assert state.zone_2.power is True
 
 
@@ -206,26 +209,26 @@ async def test_query_state_populates_full_state(receiver):
     """query_state() should populate state from all startup queries."""
     state = receiver.state
     assert state.power is True
-    assert state.main_zone_power is True
-    assert state.volume == 0.0
-    assert state.volume_max == 18.0
-    assert state.volume_min == -80.0
-    assert state.mute is False
-    assert state.input_source == InputSource.CD
-    assert state.surround_mode == "STEREO"
-    assert state.digital_input == DigitalInputMode.AUTO
-    assert state.video_select == InputSource.DVD
-    assert state.rec_select == InputSource.CD
-    assert state.tuner_frequency == "105000"
-    assert state.tuner_preset == "A1"
-    assert state.tuner_band == TunerBand.FM
-    assert state.tuner_mode == TunerMode.AUTO
-    assert state.tone_defeat is False
-    assert state.surround_back == SurroundBack.OFF
-    assert state.cinema_eq is False
-    assert state.mode_setting == ModeSetting.CINEMA
-    assert state.channel_volumes["FL"] == 0.0
-    assert state.channel_volumes["FR"] == 0.0
+    assert state.main_zone.power is True
+    assert state.main_zone.volume == 0.0
+    assert state.main_zone.volume_max == 18.0
+    assert state.main_zone.volume_min == -80.0
+    assert state.main_zone.mute is False
+    assert state.main_zone.input_source == InputSource.CD
+    assert state.main_zone.surround_mode == "STEREO"
+    assert state.main_zone.digital_input == DigitalInputMode.AUTO
+    assert state.main_zone.video_select == InputSource.DVD
+    assert state.main_zone.rec_select == InputSource.CD
+    assert state.main_zone.tuner_frequency == "105000"
+    assert state.main_zone.tuner_preset == "A1"
+    assert state.main_zone.tuner_band == TunerBand.FM
+    assert state.main_zone.tuner_mode == TunerMode.AUTO
+    assert state.main_zone.tone_defeat is False
+    assert state.main_zone.surround_back == SurroundBack.OFF
+    assert state.main_zone.cinema_eq is False
+    assert state.main_zone.mode_setting == ModeSetting.CINEMA
+    assert state.main_zone.channel_volumes["FL"] == 0.0
+    assert state.main_zone.channel_volumes["FR"] == 0.0
     assert state.zone_2.power is False
     assert state.zone_3.power is False
 
@@ -278,9 +281,9 @@ async def test_query_state_skips_known_unsupported_model_queries(mock_serial):
     assert "Z3" not in sent_queries
 
     state = recv.state
-    assert state.rec_select is None
-    assert state.tuner_frequency is None
-    assert state.tuner_preset is None
+    assert state.main_zone.rec_select is None
+    assert state.main_zone.tuner_frequency is None
+    assert state.main_zone.tuner_preset is None
     assert state.zone_3.power is None
 
     await recv.disconnect()
@@ -630,8 +633,8 @@ async def test_query_volume(receiver, mock_serial):
     result = await receiver.main.query_volume()
     await task
     assert result == -5.0
-    assert receiver.state.volume_max == 18.0
-    assert receiver.state.volume_min == -80.0
+    assert receiver.state.main_zone.volume_max == 18.0
+    assert receiver.state.main_zone.volume_min == -80.0
 
 
 async def test_query_mute(receiver, mock_serial):
@@ -765,7 +768,7 @@ async def test_input_source_event(receiver, mock_serial):
     mock_serial.inject_response("SIDVD")
     await asyncio.sleep(0.1)
 
-    assert states[-1].input_source == InputSource.DVD
+    assert states[-1].main_zone.input_source == InputSource.DVD
 
 
 async def test_input_source_event_with_slash(receiver, mock_serial):
@@ -775,7 +778,7 @@ async def test_input_source_event_with_slash(receiver, mock_serial):
     mock_serial.inject_response("SIDBS/SAT")
     await asyncio.sleep(0.1)
 
-    assert states[-1].input_source == InputSource.DBS_SAT
+    assert states[-1].main_zone.input_source == InputSource.DBS_SAT
 
 
 # -- Event tests: surround mode --
@@ -788,7 +791,7 @@ async def test_surround_mode_event(receiver, mock_serial):
     mock_serial.inject_response("MSDIRECT")
     await asyncio.sleep(0.1)
 
-    assert states[-1].surround_mode == "DIRECT"
+    assert states[-1].main_zone.surround_mode == "DIRECT"
 
 
 async def test_surround_mode_event_combined(receiver, mock_serial):
@@ -798,7 +801,7 @@ async def test_surround_mode_event_combined(receiver, mock_serial):
     mock_serial.inject_response("MSDOLBY D+PL2X C")
     await asyncio.sleep(0.1)
 
-    assert states[-1].surround_mode == "DOLBY D+PL2X C"
+    assert states[-1].main_zone.surround_mode == "DOLBY D+PL2X C"
 
 
 # -- Event tests: channel volume --
@@ -811,7 +814,7 @@ async def test_channel_volume_event(receiver, mock_serial):
     mock_serial.inject_response("CVFL 52")
     await asyncio.sleep(0.1)
 
-    assert states[-1].channel_volumes["FL"] == 2.0
+    assert states[-1].main_zone.channel_volumes["FL"] == 2.0
 
 
 async def test_channel_volume_event_subwoofer(receiver, mock_serial):
@@ -821,7 +824,7 @@ async def test_channel_volume_event_subwoofer(receiver, mock_serial):
     mock_serial.inject_response("CVSW 55")
     await asyncio.sleep(0.1)
 
-    assert states[-1].channel_volumes["SW"] == 5.0
+    assert states[-1].main_zone.channel_volumes["SW"] == 5.0
 
 
 async def test_channel_volume_event_surround_back_left(receiver, mock_serial):
@@ -831,7 +834,7 @@ async def test_channel_volume_event_surround_back_left(receiver, mock_serial):
     mock_serial.inject_response("CVSBL 48")
     await asyncio.sleep(0.1)
 
-    assert states[-1].channel_volumes["SBL"] == -2.0
+    assert states[-1].main_zone.channel_volumes["SBL"] == -2.0
 
 
 async def test_channel_volume_event_accepts_unknown_channel(receiver, mock_serial):
@@ -841,7 +844,7 @@ async def test_channel_volume_event_accepts_unknown_channel(receiver, mock_seria
     mock_serial.inject_response("CVFH 51")
     await asyncio.sleep(0.1)
 
-    assert states[-1].channel_volumes["FH"] == 1.0
+    assert states[-1].main_zone.channel_volumes["FH"] == 1.0
 
 
 async def test_channel_volume_up_event_no_state_change(receiver, mock_serial):
@@ -876,9 +879,9 @@ async def test_multiple_channel_volume_events(receiver, mock_serial):
     await asyncio.sleep(0.1)
 
     assert len(states) == 2
-    assert states[-1].channel_volumes["FL"] == 0.0
-    assert states[-1].channel_volumes["FR"] == 2.0
-    assert states[-1].channel_volumes["C"] == -2.0
+    assert states[-1].main_zone.channel_volumes["FL"] == 0.0
+    assert states[-1].main_zone.channel_volumes["FR"] == 2.0
+    assert states[-1].main_zone.channel_volumes["C"] == -2.0
 
 
 # -- Event tests: parameter settings --
@@ -891,7 +894,7 @@ async def test_tone_defeat_event(receiver, mock_serial):
     mock_serial.inject_response("PSTONE DEFEAT ON")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tone_defeat is True
+    assert states[-1].main_zone.tone_defeat is True
 
 
 async def test_tone_defeat_off_event(receiver, mock_serial):
@@ -903,7 +906,7 @@ async def test_tone_defeat_off_event(receiver, mock_serial):
     mock_serial.inject_response("PSTONE DEFEAT OFF")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tone_defeat is False
+    assert states[-1].main_zone.tone_defeat is False
 
 
 async def test_surround_back_event(receiver, mock_serial):
@@ -913,7 +916,7 @@ async def test_surround_back_event(receiver, mock_serial):
     mock_serial.inject_response("PSSB:MTRX ON")
     await asyncio.sleep(0.1)
 
-    assert states[-1].surround_back == SurroundBack.MTRX_ON
+    assert states[-1].main_zone.surround_back == SurroundBack.MTRX_ON
 
 
 async def test_surround_back_off_event(receiver, mock_serial):
@@ -925,7 +928,7 @@ async def test_surround_back_off_event(receiver, mock_serial):
     mock_serial.inject_response("PSSB:OFF")
     await asyncio.sleep(0.1)
 
-    assert states[-1].surround_back == SurroundBack.OFF
+    assert states[-1].main_zone.surround_back == SurroundBack.OFF
 
 
 async def test_cinema_eq_event(receiver, mock_serial):
@@ -935,7 +938,7 @@ async def test_cinema_eq_event(receiver, mock_serial):
     mock_serial.inject_response("PSCINEMA EQ.ON")
     await asyncio.sleep(0.1)
 
-    assert states[-1].cinema_eq is True
+    assert states[-1].main_zone.cinema_eq is True
 
 
 async def test_mode_setting_event(receiver, mock_serial):
@@ -945,7 +948,7 @@ async def test_mode_setting_event(receiver, mock_serial):
     mock_serial.inject_response("PSMODE : MUSIC")
     await asyncio.sleep(0.1)
 
-    assert states[-1].mode_setting == ModeSetting.MUSIC
+    assert states[-1].main_zone.mode_setting == ModeSetting.MUSIC
 
 
 async def test_room_eq_event(receiver, mock_serial):
@@ -955,7 +958,7 @@ async def test_room_eq_event(receiver, mock_serial):
     mock_serial.inject_response("PSROOM EQ:FLAT")
     await asyncio.sleep(0.1)
 
-    assert states[-1].room_eq == RoomEQ.FLAT
+    assert states[-1].main_zone.room_eq == RoomEQ.FLAT
 
 
 # -- Event tests: digital input --
@@ -968,7 +971,7 @@ async def test_digital_input_event(receiver, mock_serial):
     mock_serial.inject_response("SDANALOG")
     await asyncio.sleep(0.1)
 
-    assert states[-1].digital_input == DigitalInputMode.ANALOG
+    assert states[-1].main_zone.digital_input == DigitalInputMode.ANALOG
 
 
 async def test_digital_input_no_event(receiver, mock_serial, caplog):
@@ -979,7 +982,7 @@ async def test_digital_input_no_event(receiver, mock_serial, caplog):
     mock_serial.inject_response("SDNO")
     await asyncio.sleep(0.1)
 
-    assert states[-1].digital_input is None
+    assert states[-1].main_zone.digital_input is None
     assert "Unknown digital input mode: NO" not in caplog.text
 
 
@@ -993,7 +996,7 @@ async def test_video_select_event(receiver, mock_serial):
     mock_serial.inject_response("SVCD")
     await asyncio.sleep(0.1)
 
-    assert states[-1].video_select == InputSource.CD
+    assert states[-1].main_zone.video_select == InputSource.CD
 
 
 async def test_video_select_source_event(receiver, mock_serial):
@@ -1004,7 +1007,7 @@ async def test_video_select_source_event(receiver, mock_serial):
     mock_serial.inject_response("SVSOURCE")
     await asyncio.sleep(0.1)
 
-    assert states[-1].video_select is None
+    assert states[-1].main_zone.video_select is None
 
 
 async def test_video_select_off_event(receiver, mock_serial, caplog):
@@ -1015,7 +1018,7 @@ async def test_video_select_off_event(receiver, mock_serial, caplog):
     mock_serial.inject_response("SVOFF")
     await asyncio.sleep(0.1)
 
-    assert states[-1].video_select is None
+    assert states[-1].main_zone.video_select is None
     assert "Unknown video source: OFF" not in caplog.text
 
 
@@ -1029,7 +1032,7 @@ async def test_rec_select_event(receiver, mock_serial):
     mock_serial.inject_response("SRCDR/TAPE1")
     await asyncio.sleep(0.1)
 
-    assert states[-1].rec_select == InputSource.CDR_TAPE1
+    assert states[-1].main_zone.rec_select == InputSource.CDR_TAPE1
 
 
 async def test_rec_select_source_event(receiver, mock_serial):
@@ -1040,7 +1043,7 @@ async def test_rec_select_source_event(receiver, mock_serial):
     mock_serial.inject_response("SRSOURCE")
     await asyncio.sleep(0.1)
 
-    assert states[-1].rec_select is None
+    assert states[-1].main_zone.rec_select is None
 
 
 # -- Event tests: tuner --
@@ -1053,7 +1056,7 @@ async def test_tuner_frequency_event(receiver, mock_serial):
     mock_serial.inject_response("TF106000")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tuner_frequency == "106000"
+    assert states[-1].main_zone.tuner_frequency == "106000"
 
 
 async def test_tuner_frequency_up_no_state(receiver, mock_serial):
@@ -1074,7 +1077,7 @@ async def test_tuner_preset_event(receiver, mock_serial):
     mock_serial.inject_response("TPB2")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tuner_preset == "B2"
+    assert states[-1].main_zone.tuner_preset == "B2"
 
 
 async def test_tuner_band_event(receiver, mock_serial):
@@ -1084,7 +1087,7 @@ async def test_tuner_band_event(receiver, mock_serial):
     mock_serial.inject_response("TMAM")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tuner_band == TunerBand.AM
+    assert states[-1].main_zone.tuner_band == TunerBand.AM
 
 
 async def test_tuner_mode_event(receiver, mock_serial):
@@ -1094,7 +1097,7 @@ async def test_tuner_mode_event(receiver, mock_serial):
     mock_serial.inject_response("TMMANUAL")
     await asyncio.sleep(0.1)
 
-    assert states[-1].tuner_mode == TunerMode.MANUAL
+    assert states[-1].main_zone.tuner_mode == TunerMode.MANUAL
 
 
 # -- Event tests: zone 2 --
@@ -1234,7 +1237,7 @@ async def test_subscribe_receives_events(receiver, mock_serial):
     await asyncio.sleep(0.1)
 
     assert len(states) == 1
-    assert states[0].volume == -5.0
+    assert states[0].main_zone.volume == -5.0
 
 
 async def test_unsubscribe(receiver, mock_serial):
@@ -1275,7 +1278,7 @@ async def test_mute_event(receiver, mock_serial):
     mock_serial.inject_response("MUON")
     await asyncio.sleep(0.1)
 
-    assert states[-1].mute is True
+    assert states[-1].main_zone.mute is True
 
 
 async def test_main_zone_event(receiver, mock_serial):
@@ -1285,33 +1288,33 @@ async def test_main_zone_event(receiver, mock_serial):
     mock_serial.inject_response("ZMOFF")
     await asyncio.sleep(0.1)
 
-    assert states[-1].main_zone_power is False
+    assert states[-1].main_zone.power is False
 
 
 async def test_max_volume_event(receiver, mock_serial):
     """MVMAX messages should update the stored max volume."""
     states: list[ReceiverState] = []
-    receiver._state.volume_max = None
+    receiver._state.main_zone.volume_max = None
     receiver.subscribe(lambda s: states.append(s))
 
     mock_serial.inject_response("MVMAX 98")
     await asyncio.sleep(0.1)
 
-    assert states[-1].volume_max == 18.0
-    assert states[-1].volume == 0.0
+    assert states[-1].main_zone.volume_max == 18.0
+    assert states[-1].main_zone.volume == 0.0
 
 
 async def test_min_volume_event(receiver, mock_serial):
     """MVMIN messages should update the stored min volume."""
     states: list[ReceiverState] = []
-    receiver._state.volume_min = None
+    receiver._state.main_zone.volume_min = None
     receiver.subscribe(lambda s: states.append(s))
 
     mock_serial.inject_response("MVMIN 99")
     await asyncio.sleep(0.1)
 
-    assert states[-1].volume_min == -80.0
-    assert states[-1].volume == 0.0
+    assert states[-1].main_zone.volume_min == -80.0
+    assert states[-1].main_zone.volume == 0.0
 
 
 async def test_multiple_events(receiver, mock_serial):
@@ -1325,8 +1328,8 @@ async def test_multiple_events(receiver, mock_serial):
 
     assert len(states) == 3
     assert states[-1].power is False
-    assert states[-1].volume == -5.0
-    assert states[-1].mute is True
+    assert states[-1].main_zone.volume == -5.0
+    assert states[-1].main_zone.mute is True
 
 
 async def test_bad_callback_doesnt_break(receiver, mock_serial):

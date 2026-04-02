@@ -28,7 +28,7 @@ from .protocol import (
     volume_to_param as _volume_to_param,
 )
 from .receiver import DenonReceiver, StateCallback
-from .state import ReceiverState, ZoneState
+from .state import MainZoneState, ReceiverState, ZoneState
 
 __all__ = [
     "BAUD_RATE",
@@ -38,6 +38,7 @@ __all__ = [
     "DenonReceiver",
     "DigitalInputMode",
     "InputSource",
+    "MainZoneState",
     "ReceiverState",
     "MAX_VOLUME_DB",
     "MIN_VOLUME_DB",

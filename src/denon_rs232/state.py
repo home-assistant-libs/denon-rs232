@@ -28,17 +28,16 @@ class ZoneState:
 
 
 @dataclass
-class ReceiverState:
-    """Current state of the Denon receiver."""
+class MainZoneState(ZoneState):
+    """State for the main listening zone.
 
-    # Core (queryable)
-    power: bool | None = None
-    main_zone_power: bool | None = None
+    Extends ZoneState (power, input_source, volume) with main-zone-only
+    fields such as mute, surround mode, channel volumes, and tuner state.
+    """
+
     mute: bool | None = None
-    volume: float | None = None
     volume_max: float | None = None
     volume_min: float | None = None
-    input_source: InputSource | None = None
     #: Surround mode name. Kept as str because the receiver returns many
     #: combined mode names (e.g. "DOLBY D+PL2X C", "M CH IN+PL2X M").
     surround_mode: str | None = None
@@ -67,14 +66,23 @@ class ReceiverState:
     #: Event-only. Updated from TM events. AUTO or MANUAL.
     tuner_mode: TunerMode | None = None
 
-    # Zones. Event-only. Populated from Z2?/Z1? responses and zone events.
+    def copy(self) -> MainZoneState:
+        return replace(self, channel_volumes=dict(self.channel_volumes))
+
+
+@dataclass
+class ReceiverState:
+    """Current state of the Denon receiver."""
+
+    power: bool | None = None
+    main_zone: MainZoneState = field(default_factory=MainZoneState)
     zone_2: ZoneState = field(default_factory=ZoneState)
     zone_3: ZoneState = field(default_factory=ZoneState)
 
     def copy(self) -> ReceiverState:
         return replace(
             self,
-            channel_volumes=dict(self.channel_volumes),
+            main_zone=self.main_zone.copy(),
             zone_2=replace(self.zone_2),
             zone_3=replace(self.zone_3),
         )

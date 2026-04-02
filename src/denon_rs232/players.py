@@ -18,7 +18,7 @@ from .protocol import (
     parse_volume_param,
     volume_to_param,
 )
-from .state import ReceiverState, ZoneState
+from .state import MainZoneState, ZoneState
 
 if TYPE_CHECKING:
     from .receiver import DenonReceiver
@@ -30,7 +30,7 @@ class _BasePlayer:
     def __init__(
         self,
         receiver: DenonReceiver,
-        state: ReceiverState | ZoneState,
+        state: ZoneState,
         *,
         power_command: str,
         power_standby_parameter: str,
@@ -62,12 +62,12 @@ class _BasePlayer:
     @property
     def volume_min(self) -> float | None:
         """Return the shared minimum volume."""
-        return self._receiver._state.volume_min
+        return self._receiver._state.main_zone.volume_min
 
     @property
     def volume_max(self) -> float | None:
         """Return the shared maximum volume."""
-        return self._receiver._state.volume_max
+        return self._receiver._state.main_zone.volume_max
 
     async def power_on(self) -> None:
         """Turn this player on."""
@@ -106,7 +106,9 @@ class _BasePlayer:
 class MainPlayer(_BasePlayer):
     """Stateful control surface for the receiver's main output."""
 
-    def __init__(self, receiver: DenonReceiver, state: ReceiverState) -> None:
+    _state: MainZoneState
+
+    def __init__(self, receiver: DenonReceiver, state: MainZoneState) -> None:
         super().__init__(
             receiver,
             state,
@@ -115,17 +117,11 @@ class MainPlayer(_BasePlayer):
             input_source_command="SI",
             volume_command="MV",
         )
-        self._main_state = state
-
-    @property
-    def power(self) -> bool | None:
-        """Return the current main-zone power state."""
-        return self._main_state.main_zone_power
 
     @property
     def mute(self) -> bool | None:
         """Return the current mute state."""
-        return self._main_state.mute
+        return self._state.mute
 
     async def mute_on(self) -> None:
         """Mute the main player."""

@@ -25,7 +25,7 @@ async def test_probe_sources(receiver, mock_serial):
 
 async def test_probe_sources_restores_original(receiver, mock_serial):
     """probe_sources should restore the original input source."""
-    assert receiver.state.input_source == InputSource.CD
+    assert receiver.state.main_zone.input_source == InputSource.CD
 
     valid_values = {"CD", "DVD"}
 
@@ -47,7 +47,7 @@ async def test_probe_sources_restores_original(receiver, mock_serial):
     ]
     assert si_commands[-1] == b"SICD\r"
     # State should be back to CD
-    assert receiver.state.input_source == InputSource.CD
+    assert receiver.state.main_zone.input_source == InputSource.CD
 
 
 async def test_probe_includes_current_source(receiver, mock_serial):

@@ -83,6 +83,8 @@ class DenonReceiver:
         self._pending_queries: list[PendingQuery] = []
         self._write_lock = asyncio.Lock()
         self._connected = False
+        self._batching = False
+        self._batch_changed = False
 
     @property
     def model(self) -> ReceiverModel | None:
@@ -150,29 +152,41 @@ class DenonReceiver:
         raise ValueError(f"Unknown power state: {resp}")
 
     async def query_state(self) -> None:
-        """Query all initial state from the receiver."""
+        """Query all initial state from the receiver.
+
+        Subscriber notifications are suppressed while the queries run and
+        fired once at the end if any value changed.
+        """
         unsupported_queries = (
             self._model.unsupported_startup_queries if self._model is not None else ()
         )
-        for prefix in _SINGLE_RESPONSE_PREFIXES:
-            if prefix == "PW" or prefix in unsupported_queries:
-                continue
-            try:
-                await self._query(prefix)
-            except TimeoutError:
-                pass
-
-        for prefix in _MULTI_RESPONSE_PREFIXES:
-            if prefix == "Z1":
-                if self._model is not None and self._model.zone3_prefix is None:
+        self._batching = True
+        self._batch_changed = False
+        try:
+            for prefix in _SINGLE_RESPONSE_PREFIXES:
+                if prefix == "PW" or prefix in unsupported_queries:
                     continue
-                prefix = self._zone3_prefix
+                try:
+                    await self._query(prefix)
+                except TimeoutError:
+                    pass
 
-            if prefix in unsupported_queries:
-                continue
+            for prefix in _MULTI_RESPONSE_PREFIXES:
+                if prefix == "Z1":
+                    if self._model is not None and self._model.zone3_prefix is None:
+                        continue
+                    prefix = self._zone3_prefix
 
-            await self._send_command(prefix, "?")
-            await asyncio.sleep(MULTI_RESPONSE_DELAY)
+                if prefix in unsupported_queries:
+                    continue
+
+                await self._send_command(prefix, "?")
+                await asyncio.sleep(MULTI_RESPONSE_DELAY)
+        finally:
+            self._batching = False
+
+        if self._batch_changed:
+            self._notify_subscribers()
 
     async def probe_sources(
         self, timeout: float | None = None
@@ -461,7 +475,10 @@ class DenonReceiver:
                 pending.future.set_result(param)
 
         if changed:
-            self._notify_subscribers()
+            if self._batching:
+                self._batch_changed = True
+            else:
+                self._notify_subscribers()
 
     def _process_ps_param(self, param: str) -> bool:
         """Process a PS (parameter setting) parameter."""

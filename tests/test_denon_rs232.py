@@ -265,6 +265,42 @@ async def test_query_state_queries_all_prefixes(mock_serial):
     await recv.disconnect()
 
 
+async def test_query_state_notifies_subscribers_once(mock_serial):
+    """query_state() should fire a single notification despite many queries."""
+    recv = DenonReceiver("/dev/ttyUSB0")
+    mock_serial._query_responses = dict(DEFAULT_QUERY_RESPONSES)
+
+    async def fake_open(*args, **kwargs):
+        return mock_serial.reader, mock_serial.writer
+
+    notifications = []
+
+    with patch(
+        "denon_rs232.receiver.serialx.open_serial_connection",
+        side_effect=fake_open,
+    ):
+        await recv.connect()
+        recv.subscribe(notifications.append)
+        await recv.query_state()
+
+    assert len(notifications) == 1
+    assert notifications[0].main_zone.input_source == InputSource.CD
+
+    await recv.disconnect()
+
+
+async def test_query_state_no_notification_when_unchanged(receiver, mock_serial):
+    """A repeat query_state() with identical state should not notify."""
+    mock_serial._query_responses = dict(DEFAULT_QUERY_RESPONSES)
+
+    notifications = []
+    receiver.subscribe(notifications.append)
+
+    await receiver.query_state()
+
+    assert notifications == []
+
+
 async def test_query_state_skips_known_unsupported_model_queries(mock_serial):
     """Known model capabilities should trim unsupported startup probes."""
     recv = await connect_with_defaults(mock_serial, model=AVR_X2700H)

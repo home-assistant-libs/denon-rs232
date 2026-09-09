@@ -185,7 +185,7 @@ def test_avr_x2700h_skips_known_unsupported_startup_queries():
 
 def test_all_models_tuple():
     """ALL_MODELS should contain all defined models."""
-    assert len(ALL_MODELS) == 11
+    assert len(ALL_MODELS) == 13
     assert AVR_3805 in ALL_MODELS
     assert AVR_X4200W in ALL_MODELS
     assert AVR_X2700H in ALL_MODELS

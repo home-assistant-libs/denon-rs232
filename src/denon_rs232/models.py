@@ -180,6 +180,20 @@ AVR_3805 = ReceiverModel(
     zone_half_db_volume_step=False,
 )
 
+AVR_2807 = ReceiverModel(
+    name="AVR-2807",
+    input_sources=_LEGACY_SOURCES,
+    digital_inputs=_GEN1_DIGITAL,
+    surround_modes=_LEGACY_SURROUND,
+)
+
+AVC_2920 = ReceiverModel(
+    name="AVC-2920",
+    input_sources=_LEGACY_SOURCES,
+    digital_inputs=_GEN1_DIGITAL,
+    surround_modes=_LEGACY_SURROUND,
+)
+
 AVR_987 = ReceiverModel(
     name="AVR-987",
     input_sources=_LEGACY_SOURCES
@@ -460,6 +474,8 @@ OTHER = ReceiverModel(
 ALL_MODELS: tuple[ReceiverModel, ...] = (
     AVR_3803,
     AVR_3805,
+    AVR_2807,
+    AVC_2920,
     AVR_987,
     AVR_2308CI,
     AVR_2808CI,
@@ -473,6 +489,8 @@ ALL_MODELS: tuple[ReceiverModel, ...] = (
 
 #: Models keyed by identifier string, for lookup. Includes "other".
 MODELS: dict[str, ReceiverModel] = {
+    "avr_2807": AVR_2807,
+    "avc_2920": AVC_2920,
     "avr_3803": AVR_3803,
     "avr_3805": AVR_3805,
     "avr_987": AVR_987,

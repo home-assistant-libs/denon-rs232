@@ -339,6 +339,8 @@ Available models:
 |----------|--------|-----|--------|---------|
 | `AVR_3803` | AVR-3803 / AVC-3570 / AVR-2803 | ~2003 | Z1 | Gen 1 (PCM/DTS/RF) |
 | `AVR_3805` | AVR-3805 / AVC-3890 | ~2004 | Z1 | Gen 1 (PCM/DTS) |
+| `AVR_2807` | AVR-2807 | ~2005 | -- | Gen 1 |
+| `AVC_2920` | AVC-2920 | ~2005 | -- | Gen 1 |
 | `AVR_987` | AVR-987 | ~2005 | Z3 | Gen 1 |
 | `AVR_2308CI` | AVR-2308CI / AVC-2308 | ~2007 | -- | Gen 1 |
 | `AVR_2808CI` | AVR-2808CI / AVC-2808 / AVR-988 | ~2007 | Z3 | Gen 1 |

@@ -137,14 +137,18 @@ class DenonReceiver:
         """Open the serial connection, verify, and query all state.
 
         Raises ``RuntimeError`` if already connected. Call ``disconnect()``
-        first to reconnect.
+        first to reconnect. Raises ``DenonConnectionError`` if the port
+        cannot be opened.
         """
         if self._connected:
             raise RuntimeError("Already connected")
-        self._reader, self._writer = await serialx.open_serial_connection(
-            self._port,
-            baudrate=BAUD_RATE,
-        )
+        try:
+            self._reader, self._writer = await serialx.open_serial_connection(
+                self._port,
+                baudrate=BAUD_RATE,
+            )
+        except serialx.SerialException as err:
+            raise DenonConnectionError(str(err)) from err
         self._connected = True
         self._read_task = asyncio.create_task(self._read_loop())
         self._read_task.add_done_callback(self._on_read_task_done)

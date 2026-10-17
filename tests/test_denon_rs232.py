@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import serialx
 
 from conftest import (
     DEFAULT_QUERY_RESPONSES,
@@ -1965,3 +1966,30 @@ async def test_read_loop_crash_tears_down(receiver, mock_serial, caplog):
 
     assert not receiver.connected
     assert "Read loop failed" in caplog.text
+
+
+async def test_connect_serial_exception_allows_retry(mock_serial) -> None:
+    """An unavailable serial port is a connection failure and can be retried."""
+    device = DenonReceiver("esphome://proxy.local/?port_name=RS232")
+    error = serialx.SerialException("Serial proxy is unavailable")
+    mock_serial._query_responses = dict(DEFAULT_QUERY_RESPONSES)
+
+    with patch(
+        "denon_rs232.receiver.serialx.open_serial_connection",
+        side_effect=[error, (mock_serial.reader, mock_serial.writer)],
+    ) as open_connection:
+        with pytest.raises(
+            DenonConnectionError, match="Serial proxy is unavailable"
+        ) as exc_info:
+            await device.connect()
+
+        assert exc_info.value.__cause__ is error
+        assert not device.connected
+        mock_serial.writer.write.assert_not_called()
+
+        try:
+            await device.connect()
+            assert device.connected
+            assert open_connection.await_count == 2
+        finally:
+            await device.disconnect()
